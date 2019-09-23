@@ -62,8 +62,8 @@ UsdMayaGLHdRenderer::CheckRendererSetup(
         _renderedPrim = usdPrim;
         _excludePrimPaths = excludePaths;
 
-        _renderer.reset(new UsdImagingGL(_renderedPrim.GetPath(),
-                                         _excludePrimPaths));
+        _renderer.reset(new UsdImagingGLEngine(_renderedPrim.GetPath(),
+                                               _excludePrimPaths));
     }
 }
 
@@ -189,7 +189,8 @@ void UsdMayaGLHdRenderer::RenderVp2(
         glEnable(GL_LIGHTING);
     }
 
-    _renderer->SetCameraState(modelViewMatrix, projectionMatrix, viewport);
+    _renderer->SetCameraState(modelViewMatrix, projectionMatrix);
+    _renderer->SetRenderViewport(viewport);
 
     _renderer->SetLightingStateFromOpenGL();
 
@@ -279,7 +280,8 @@ UsdMayaGLHdRenderer::Render(
     GfMatrix4d projectionMatrix(mayaProjMatrix.matrix);
     GfVec4d viewport(viewX, viewY, viewWidth, viewHeight);
 
-    _renderer->SetCameraState(modelViewMatrix, projectionMatrix, viewport);
+    _renderer->SetCameraState(modelViewMatrix, projectionMatrix);
+    _renderer->SetRenderViewport(viewport);
     _renderer->SetLightingStateFromOpenGL();
 
 

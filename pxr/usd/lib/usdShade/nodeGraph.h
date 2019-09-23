@@ -39,7 +39,6 @@
 #include "pxr/usd/usdShade/output.h"
 #include "pxr/usd/usdShade/shader.h"
 
-
 #include "pxr/base/vt/value.h"
 
 #include "pxr/base/gf/vec3d.h"
@@ -157,7 +156,7 @@ protected:
     ///
     /// \sa UsdSchemaType
     USDSHADE_API
-    virtual UsdSchemaType _GetSchemaType() const;
+    UsdSchemaType _GetSchemaType() const override;
 
 private:
     // needs to invoke _GetStaticTfType.
@@ -169,7 +168,7 @@ private:
 
     // override SchemaBase virtuals.
     USDSHADE_API
-    virtual const TfType &_GetTfType() const;
+    const TfType &_GetTfType() const override;
 
 public:
     // ===================================================================== //

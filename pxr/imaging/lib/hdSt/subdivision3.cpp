@@ -32,7 +32,6 @@
 #include "pxr/imaging/hd/bufferArrayRange.h"
 #include "pxr/imaging/hd/bufferResource.h"
 #include "pxr/imaging/hd/meshUtil.h"
-#include "pxr/imaging/hd/patchIndex.h"
 #include "pxr/imaging/hd/perfLog.h"
 #include "pxr/imaging/hd/tokens.h"
 #include "pxr/imaging/hd/vtBufferSource.h"
@@ -280,8 +279,8 @@ HdSt_Osd3Subdivision::RefineCPU(HdBufferSourceSharedPtr const &source,
 
     // NOTE: in osd, GetNumElements() returns how many fields in a vertex
     //          (i.e.  3 for XYZ, and 4 for RGBA)
-    //       in hydra, GetNumElements() returns how many vertices
-    //       (or faces, etc) in a buffer. We basically follow the hydra
+    //       in Storm, GetNumElements() returns how many vertices
+    //       (or faces, etc) in a buffer. We basically follow the Storm
     //       convention in this file.
     TF_VERIFY(stride == (size_t)osdVertexBuffer->GetNumElements(),
               "%zu vs %i", stride, osdVertexBuffer->GetNumElements());

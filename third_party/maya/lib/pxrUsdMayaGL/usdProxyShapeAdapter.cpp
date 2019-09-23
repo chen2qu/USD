@@ -144,14 +144,16 @@ PxrMayaHdUsdProxyShapeAdapter::_Sync(
     SdfPathVector excludedPrimPaths;
     int refineLevel;
     UsdTimeCode timeCode;
-    bool showGuides;
-    bool showRenderGuides;
+    bool drawRenderPurpose = false;
+    bool drawProxyPurpose = true;
+    bool drawGuidePurpose = false;
     if (!usdProxyShape->GetAllRenderAttributes(&usdPrim,
                                                &excludedPrimPaths,
                                                &refineLevel,
                                                &timeCode,
-                                               &showGuides,
-                                               &showRenderGuides)) {
+                                               &drawRenderPurpose,
+                                               &drawProxyPurpose,
+                                               &drawGuidePurpose)) {
         TF_DEBUG(PXRUSDMAYAGL_SHAPE_ADAPTER_LIFECYCLE).Msg(
                 "Failed to get render attributes for UsdMayaProxyShape '%s'\n",
                 shapeDagPath.fullPathName().asChar());
@@ -180,29 +182,17 @@ PxrMayaHdUsdProxyShapeAdapter::_Sync(
     PxrMayaHdRenderParams renderParams;
     _renderParams = renderParams;
 
-    // XXX Not yet adding ability to turn off display of proxy geometry, but
-    // we should at some point, as in usdview.
-    TfTokenVector renderTags;
-    renderTags.push_back(HdTokens->geometry);
-    renderTags.push_back(HdTokens->proxy);
-    if (showGuides) {
-        renderTags.push_back(HdTokens->guide);
+    // Update Render Tags
+    _renderTags.clear();
+    _renderTags.push_back(HdRenderTagTokens->geometry);
+    if (drawRenderPurpose) {
+        _renderTags.push_back(HdRenderTagTokens->render);
     }
-    if (showRenderGuides) {
-        renderTags.push_back(UsdGeomTokens->render);
+    if (drawProxyPurpose) {
+        _renderTags.push_back(HdRenderTagTokens->proxy);
     }
-
-    if (_rprimCollection.GetRenderTags() != renderTags) {
-        _rprimCollection.SetRenderTags(renderTags);
-
-        TF_DEBUG(PXRUSDMAYAGL_SHAPE_ADAPTER_LIFECYCLE).Msg(
-            "    Render tags changed: %s\n"
-            "        Marking collection dirty: %s\n",
-            TfStringJoin(renderTags.begin(), renderTags.end()).c_str(),
-            _rprimCollection.GetName().GetText());
-
-        _delegate->GetRenderIndex().GetChangeTracker().MarkCollectionDirty(
-            _rprimCollection.GetName());
+    if (drawGuidePurpose) {
+        _renderTags.push_back(HdRenderTagTokens->guide);
     }
 
     MStatus status;
@@ -330,13 +320,15 @@ PxrMayaHdUsdProxyShapeAdapter::_Init(HdRenderIndex* renderIndex)
         return true;
     }
 
-    const TfToken collectionName(_shapeDagPath.fullPathName().asChar());
+    const TfToken collectionName = _GetRprimCollectionName();
 
     TF_DEBUG(PXRUSDMAYAGL_SHAPE_ADAPTER_LIFECYCLE).Msg(
         "Initializing PxrMayaHdUsdProxyShapeAdapter: %p\n"
+        "    shape DAG path : %s\n"
         "    collection name: %s\n"
         "    delegateId     : %s\n",
         this,
+        _shapeDagPath.fullPathName().asChar(),
         collectionName.GetText(),
         delegateId.GetText());
 

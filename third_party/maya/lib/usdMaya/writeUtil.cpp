@@ -24,16 +24,18 @@
 #include "pxr/pxr.h"
 #include "usdMaya/writeUtil.h"
 
+#include "usdMaya/adaptor.h"
 #include "usdMaya/colorSpace.h"
 #include "usdMaya/translatorUtil.h"
-#include "usdMaya/adaptor.h"
 #include "usdMaya/userTaggedAttribute.h"
 
 #include "pxr/base/gf/gamma.h"
 #include "pxr/base/gf/rotation.h"
+#include "pxr/base/tf/envSetting.h"
 #include "pxr/base/tf/token.h"
 #include "pxr/base/vt/types.h"
-#include "pxr/base/tf/envSetting.h"
+#include "pxr/base/vt/value.h"
+#include "pxr/usd/sdf/path.h"
 #include "pxr/usd/sdf/valueTypeName.h"
 #include "pxr/usd/usd/attribute.h"
 #include "pxr/usd/usd/inherits.h"
@@ -46,7 +48,6 @@
 #include "pxr/usd/usdRi/statementsAPI.h"
 #include "pxr/usd/usdUtils/sparseValueWriter.h"
 
-#include <maya/MDagPath.h>
 #include <maya/MDoubleArray.h>
 #include <maya/MFnDependencyNode.h>
 #include <maya/MFnDoubleArrayData.h>
@@ -64,6 +65,7 @@
 #include <maya/MFnVectorArrayData.h>
 #include <maya/MFnAttribute.h>
 #include <maya/MMatrix.h>
+#include <maya/MObject.h>
 #include <maya/MPlug.h>
 #include <maya/MPoint.h>
 #include <maya/MStatus.h>
@@ -74,14 +76,18 @@
 #include <string>
 #include <vector>
 
+
 PXR_NAMESPACE_OPEN_SCOPE
 
+
 TF_DEFINE_ENV_SETTING(
-        PIXMAYA_WRITE_UV_AS_FLOAT2, true,
-        "Set to true to write uv sets as Float2Array types "
-        " and set to false to write Texture Coordinate value types "
-        "(TexCoord2h, TexCoord2f, TexCoord2d, TexCoord3h, "
-        " TexCoord3f, TexCoord3d and their associated Array types)");
+    PIXMAYA_WRITE_UV_AS_FLOAT2,
+    true,
+    "Set to true to write uv sets as Float2Array types and set to false to "
+    "write Texture Coordinate value types (TexCoord2h, TexCoord2f, "
+    "TexCoord2d, TexCoord3h, TexCoord3f, TexCoord3d and their associated "
+    "Array types)");
+
 
 static
 bool
@@ -126,7 +132,7 @@ _GetMayaAttributeNumericTypedAndUnitDataTypes(
 bool
 UsdMayaWriteUtil::WriteUVAsFloat2()
 {
-    static const bool writeUVAsFloat2 = 
+    static const bool writeUVAsFloat2 =
         TfGetEnvSetting(PIXMAYA_WRITE_UV_AS_FLOAT2);
     return writeUVAsFloat2;
 }
@@ -455,9 +461,9 @@ UsdAttribute UsdMayaWriteUtil::GetOrCreateUsdRiAttribute(
 
 template <typename T>
 static bool
-_SetAttribute(const UsdAttribute& usdAttr, 
-              const T &value, 
-              const UsdTimeCode &usdTime, 
+_SetAttribute(const UsdAttribute& usdAttr,
+              const T &value,
+              const UsdTimeCode &usdTime,
               UsdUtilsSparseValueWriter *valueWriter)
 {
     return valueWriter ?
@@ -467,29 +473,34 @@ _SetAttribute(const UsdAttribute& usdAttr,
 
 /// Converts a vec from display to linear color if its role is color.
 template <typename T>
-static VtValue
+static
+VtValue
 _ConvertVec(
+        const T& val,
         const TfToken& role,
-        const T& val) {
-    return VtValue(role == SdfValueRoleNames->Color
-            ? UsdMayaColorSpace::ConvertMayaToLinear(val)
-            : val);
+        const bool linearizeColors) {
+    return VtValue(
+        ((role == SdfValueRoleNames->Color) && linearizeColors) ?
+            UsdMayaColorSpace::ConvertMayaToLinear(val) :
+            val);
 }
 
 VtValue
 UsdMayaWriteUtil::GetVtValue(
         const MPlug& attrPlug,
-        const SdfValueTypeName& typeName)
+        const SdfValueTypeName& typeName,
+        const bool linearizeColors)
 {
     const TfType type = typeName.GetType();
     const TfToken role = typeName.GetRole();;
-    return GetVtValue(attrPlug, type, role);
+    return GetVtValue(attrPlug, type, role, linearizeColors);
 }
 VtValue
 UsdMayaWriteUtil::GetVtValue(
         const MPlug& attrPlug,
         const TfType& type,
-        const TfToken& role)
+        const TfToken& role,
+        const bool linearizeColors)
 {
     // We perform a similar set of type-infererence acrobatics here as we do up
     // above in GetUsdTypeName(). See the comments there for more detail on a
@@ -762,7 +773,10 @@ UsdMayaWriteUtil::GetVtValue(
                 float tmp1, tmp2, tmp3;
                 MFnNumericData numericDataFn(attrPlug.asMObject());
                 numericDataFn.getData(tmp1, tmp2, tmp3);
-                return _ConvertVec(role, GfVec3f(tmp1, tmp2, tmp3));
+                return _ConvertVec(
+                    GfVec3f(tmp1, tmp2, tmp3),
+                    role,
+                    linearizeColors);
             }
             break;
         }
@@ -791,10 +805,15 @@ UsdMayaWriteUtil::GetVtValue(
             MFnNumericData numericDataFn(attrPlug.asMObject());
             numericDataFn.getData(tmp1, tmp2, tmp3);
             if (type.IsA<GfVec3f>()) {
-                return _ConvertVec(role,
-                        GfVec3f((float)tmp1, (float)tmp2, (float)tmp3));
+                return _ConvertVec(
+                    GfVec3f((float)tmp1, (float)tmp2, (float)tmp3),
+                    role,
+                    linearizeColors);
             } else if (type.IsA<GfVec3d>()) {
-                return _ConvertVec(role, GfVec3d(tmp1, tmp2, tmp3));
+                return _ConvertVec(
+                    GfVec3d(tmp1, tmp2, tmp3),
+                    role,
+                    linearizeColors);
             }
             break;
         }
@@ -803,13 +822,15 @@ UsdMayaWriteUtil::GetVtValue(
             MFnNumericData numericDataFn(attrPlug.asMObject());
             numericDataFn.getData(tmp1, tmp2, tmp3, tmp4);
             if (type.IsA<GfVec4f>()) {
-                return _ConvertVec(role,
-                        GfVec4f((float)tmp1,
-                                (float)tmp2,
-                                (float)tmp3,
-                                (float)tmp4));
+                return _ConvertVec(
+                    GfVec4f((float)tmp1, (float)tmp2, (float)tmp3, (float)tmp4),
+                    role,
+                    linearizeColors);
             } else if (type.IsA<GfVec4d>()) {
-                return _ConvertVec(role, GfVec4d(tmp1, tmp2, tmp3, tmp4));
+                return _ConvertVec(
+                    GfVec4d(tmp1, tmp2, tmp3, tmp4),
+                    role,
+                    linearizeColors);
             } else if (type.IsA<GfQuatf>()) {
                 float re = tmp1;
                 GfVec3f im(tmp2, tmp3, tmp4);
@@ -869,11 +890,12 @@ UsdMayaWriteUtil::SetUsdAttr(
     return _SetAttribute(usdAttr, val, usdTime, valueWriter);
 }
 
-// This method inspects the JSON blob stored in the 'USD_UserExportedAttributesJson'
-// attribute on the Maya node at dagPath and exports any attributes specified
-// there onto usdPrim at time usdTime. The JSON should contain an object that
-// maps Maya attribute names to other JSON objects that contain metadata about
-// how to export the attribute into USD. For example:
+// This method inspects the JSON blob stored in the
+// 'USD_UserExportedAttributesJson' attribute on the Maya node mayaNode and
+// exports any attributes specified there onto usdPrim at time usdTime.
+// The JSON should contain an object that maps Maya attribute names to other
+// JSON objects that contain metadata about how to export the attribute into
+// USD. For example:
 //
 //    {
 //        "myMayaAttributeOne": {
@@ -906,13 +928,13 @@ UsdMayaWriteUtil::SetUsdAttr(
 //
 bool
 UsdMayaWriteUtil::WriteUserExportedAttributes(
-        const MDagPath& dagPath,
+        const MObject& mayaNode,
         const UsdPrim& usdPrim,
         const UsdTimeCode& usdTime,
         UsdUtilsSparseValueWriter *valueWriter)
 {
     std::vector<UsdMayaUserTaggedAttribute> exportedAttributes =
-        UsdMayaUserTaggedAttribute::GetUserTaggedAttributesForNode(dagPath);
+        UsdMayaUserTaggedAttribute::GetUserTaggedAttributesForNode(mayaNode);
     for (const UsdMayaUserTaggedAttribute& attr : exportedAttributes) {
         const std::string& usdAttrName = attr.GetUsdName();
         const TfToken& usdAttrType = attr.GetUsdType();
@@ -1002,7 +1024,7 @@ bool
 UsdMayaWriteUtil::WriteAPISchemaAttributesToPrim(
     const MObject& mayaObject,
     const UsdPrim& prim,
-    UsdUtilsSparseValueWriter *valueWriter)    
+    UsdUtilsSparseValueWriter *valueWriter)
 {
     UsdMayaAdaptor adaptor(mayaObject);
     if (!adaptor) {
@@ -1164,22 +1186,30 @@ UsdMayaWriteUtil::WriteArrayAttrsToInstancer(
     // Most Maya instancer data sources provide id's. If this once doesn't, then
     // just skip the id's attr because it's optional in USD, and we don't have
     // a good way to generate sane id's.
+    // Note that we need to populate indicesOrIds in either case; the schema
+    // interprets some attributes (e.g. visibility) as referring to id's if
+    // present or indices otherwise.
+    VtInt64Array indicesOrIds;
     MFnArrayAttrsData::Type type;
     if (inputPointsData.checkArrayExist("id", type) &&
             type == MFnArrayAttrsData::kDoubleArray) {
         const MDoubleArray id = inputPointsData.doubleArray("id", &status);
         CHECK_MSTATUS_AND_RETURN(status, false);
 
-        VtArray<int64_t> vtArray = _MapMayaToVtArray<
+        indicesOrIds = _MapMayaToVtArray<
             MDoubleArray, double, int64_t>(
             id,
             [](double x) {
                 return (int64_t) x;
             });
-        _SetAttribute(instancer.CreateIdsAttr(), vtArray, usdTime, valueWriter);
+        _SetAttribute(instancer.CreateIdsAttr(), indicesOrIds, usdTime,
+                valueWriter);
     }
     else {
-        // Skip.
+        // Skip writing the id's, but still generate the indicesOrIds array.
+        for (size_t i = 0; i < numInstances; ++i) {
+            indicesOrIds.push_back(i);
+        }
     }
 
     // Export the rest of the per-instance array attrs.
@@ -1202,13 +1232,13 @@ UsdMayaWriteUtil::WriteArrayAttrsToInstancer(
                     return (int) numPrototypes - 1;
                 }
             });
-        _SetAttribute(instancer.CreateProtoIndicesAttr(), vtArray, 
+        _SetAttribute(instancer.CreateProtoIndicesAttr(), vtArray,
                       usdTime, valueWriter);
     }
     else {
         VtArray<int> vtArray;
         vtArray.assign(numInstances, 0);
-        _SetAttribute(instancer.CreateProtoIndicesAttr(), 
+        _SetAttribute(instancer.CreateProtoIndicesAttr(),
                       vtArray, usdTime, valueWriter);
     }
 
@@ -1236,7 +1266,7 @@ UsdMayaWriteUtil::WriteArrayAttrsToInstancer(
 
     if (inputPointsData.checkArrayExist("rotation", type) &&
             type == MFnArrayAttrsData::kVectorArray) {
-        const MVectorArray rotation = inputPointsData.vectorArray("rotation", 
+        const MVectorArray rotation = inputPointsData.vectorArray("rotation",
                 &status);
         CHECK_MSTATUS_AND_RETURN(status, false);
 
@@ -1255,7 +1285,7 @@ UsdMayaWriteUtil::WriteArrayAttrsToInstancer(
     else {
         VtQuathArray vtArray;
         vtArray.assign(numInstances, GfQuath(0.0f));
-        _SetAttribute(instancer.CreateOrientationsAttr(), 
+        _SetAttribute(instancer.CreateOrientationsAttr(),
                       vtArray, usdTime, valueWriter);
     }
 
@@ -1278,6 +1308,28 @@ UsdMayaWriteUtil::WriteArrayAttrsToInstancer(
         VtVec3fArray vtArray;
         vtArray.assign(numInstances, GfVec3f(1.0));
         _SetAttribute(instancer.CreateScalesAttr(), vtArray, usdTime,
+                      valueWriter);
+    }
+
+    // Note: Maya stores visibility as an array of doubles, one corresponding
+    // to each instance. USD stores visibility as a sparse array of only the
+    // particular id's (or indices) to be invis'ed.
+    // Visibility isn't required, so skip authoring if it doesn't exist.
+    if (inputPointsData.checkArrayExist("visibility", type) &&
+            type == MFnArrayAttrsData::kDoubleArray) {
+        const MDoubleArray visibility = inputPointsData.doubleArray(
+                "visibility", &status);
+        CHECK_MSTATUS_AND_RETURN(status, false);
+
+        VtInt64Array invisibleIds;
+        for (size_t i = 0; i < visibility.length(); ++i) {
+            if (visibility[i] == 0.0) {
+                if (i < indicesOrIds.size()) {
+                    invisibleIds.push_back(indicesOrIds[i]);
+                }
+            }
+        }
+        _SetAttribute(instancer.CreateInvisibleIdsAttr(), invisibleIds, usdTime,
                       valueWriter);
     }
 
@@ -1488,5 +1540,5 @@ UsdMayaWriteUtil::GetTimeSamples(
     return samples;
 }
 
-PXR_NAMESPACE_CLOSE_SCOPE
 
+PXR_NAMESPACE_CLOSE_SCOPE

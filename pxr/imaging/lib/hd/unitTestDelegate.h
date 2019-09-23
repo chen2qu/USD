@@ -89,6 +89,8 @@ public:
                  PxOsdSubdivTags const &subdivTags,
                  VtValue const &color,
                  HdInterpolation colorInterpolation,
+                 VtValue const &opacity,
+                 HdInterpolation opacityInterpolation,
                  bool guide=false,
                  SdfPath const &instancerId=SdfPath(),
                  TfToken const &scheme=PxOsdOpenSubdivTokens->catmark,
@@ -128,14 +130,14 @@ public:
                                      bool rightHanded=true, bool doubleSided=false,
                                      SdfPath const &instancerId=SdfPath());
 
-    // Add a grid with division x*y and a custom primvar
+    // Add a grid with division x*y and a custom color
     HD_API
-    void AddGridWithPrimvar(SdfPath const &id, int nx, int ny,
-                            GfMatrix4f const &transform,
-                            VtValue const &primvar,
-                            HdInterpolation primvarInterpolation,
-                            bool rightHanded=true, bool doubleSided=false,
-                            SdfPath const &instancerId=SdfPath());
+    void AddGridWithCustomColor(SdfPath const &id, int nx, int ny,
+                                GfMatrix4f const &transform,
+                                VtValue const &color,
+                                HdInterpolation colorInterpolation,
+                                bool rightHanded=true, bool doubleSided=false,
+                                SdfPath const &instancerId=SdfPath());
 
     /// Add a triangle, quad and pentagon.
     HD_API
@@ -159,6 +161,8 @@ public:
                         TfToken const &basis,
                         VtValue const &color,
                         HdInterpolation colorInterpolation,
+                        VtValue const &opacity,
+                        HdInterpolation opacityInterpolation,
                         VtValue const &width,
                         HdInterpolation widthInterpolation,
                         SdfPath const &instancerId=SdfPath());
@@ -177,6 +181,8 @@ public:
                    VtVec3fArray const &points,
                    VtValue const &color,
                    HdInterpolation colorInterpolation,
+                   VtValue const &opacity,
+                   HdInterpolation opacityInterpolation,
                    VtValue const &width,
                    HdInterpolation widthInterpolation,
                    SdfPath const &instancerId=SdfPath());
@@ -210,6 +216,12 @@ public:
                           std::string const &sourceDisplacement,
                           HdMaterialParamVector const &params);
     
+    HD_API
+    void UpdateMaterialHydra(SdfPath const &id,
+                             std::string const &sourceSurface,
+                             std::string const &sourceDisplacement,
+                             HdMaterialParamVector const &params);
+
     /// Material
     HD_API
     void AddMaterialResource(SdfPath const &id,
@@ -302,25 +314,26 @@ public:
     // See HdSceneDelegate for documentation of virtual methods.
     // ---------------------------------------------------------------------- //
     HD_API
-    virtual HdMeshTopology GetMeshTopology(SdfPath const& id);
+    virtual HdMeshTopology GetMeshTopology(SdfPath const& id) override;
     HD_API
-    virtual HdBasisCurvesTopology GetBasisCurvesTopology(SdfPath const& id);
+    virtual HdBasisCurvesTopology GetBasisCurvesTopology(SdfPath const& id) 
+        override;
     HD_API
     virtual TfToken GetRenderTag(SdfPath const& id) override;
     HD_API
-    virtual PxOsdSubdivTags GetSubdivTags(SdfPath const& id);
+    virtual PxOsdSubdivTags GetSubdivTags(SdfPath const& id) override;
     HD_API
-    virtual GfRange3d GetExtent(SdfPath const & id);
+    virtual GfRange3d GetExtent(SdfPath const & id) override;
     HD_API
-    virtual GfMatrix4d GetTransform(SdfPath const & id);
+    virtual GfMatrix4d GetTransform(SdfPath const & id) override;
     HD_API
-    virtual bool GetVisible(SdfPath const & id);
+    virtual bool GetVisible(SdfPath const & id) override;
     HD_API
-    virtual bool GetDoubleSided(SdfPath const & id);
+    virtual bool GetDoubleSided(SdfPath const & id) override;
     HD_API
     virtual HdDisplayStyle GetDisplayStyle(SdfPath const & id) override;
     HD_API
-    virtual VtValue Get(SdfPath const& id, TfToken const& key);
+    virtual VtValue Get(SdfPath const& id, TfToken const& key) override;
     HD_API
     virtual HdReprSelector GetReprSelector(SdfPath const &id) override;
     HD_API
@@ -330,31 +343,40 @@ public:
 
     HD_API
     virtual VtIntArray GetInstanceIndices(SdfPath const& instancerId,
-                                          SdfPath const& prototypeId);
+                                          SdfPath const& prototypeId) override;
 
     HD_API
-    virtual GfMatrix4d GetInstancerTransform(SdfPath const& instancerId,
-                                             SdfPath const& prototypeId);
+    virtual GfMatrix4d GetInstancerTransform(SdfPath const& instancerId)
+        override;
 
     HD_API
-    virtual SdfPath GetMaterialId(SdfPath const& rprimId);
+    virtual SdfPath GetMaterialId(SdfPath const& rprimId) override;
     HD_API
-    virtual std::string GetSurfaceShaderSource(SdfPath const &materialId);
+    virtual std::string GetSurfaceShaderSource(SdfPath const &materialId)
+        override;
     HD_API
-    virtual std::string GetDisplacementShaderSource(SdfPath const &materialId);    
+    virtual std::string GetDisplacementShaderSource(SdfPath const &materialId)
+        override;    
     HD_API
-    virtual HdMaterialParamVector GetMaterialParams(SdfPath const &materialId);
+    virtual HdMaterialParamVector GetMaterialParams(SdfPath const &materialId)
+        override;
     HD_API
     virtual VtValue GetMaterialParamValue(SdfPath const &materialId, 
-                                          TfToken const &paramName);
+                                          TfToken const &paramName) override;
     HD_API
-    virtual HdTextureResource::ID GetTextureResourceID(SdfPath const& textureId);
+    virtual VtValue GetCameraParamValue(SdfPath const &cameraId, 
+                                        TfToken const &paramName) override;
     HD_API
-    virtual HdTextureResourceSharedPtr GetTextureResource(SdfPath const& textureId);
+    virtual HdTextureResource::ID GetTextureResourceID(
+        SdfPath const& textureId) override;
+    HD_API
+    virtual HdTextureResourceSharedPtr GetTextureResource(
+        SdfPath const& textureId) override;
     HD_API 
-    virtual VtValue GetMaterialResource(SdfPath const &materialId);
+    virtual VtValue GetMaterialResource(SdfPath const &materialId) override;
     HD_API
-    virtual HdRenderBufferDescriptor GetRenderBufferDescriptor(SdfPath const& id);
+    virtual HdRenderBufferDescriptor GetRenderBufferDescriptor(
+        SdfPath const& id) override;
 
 private:
     struct _Mesh {
@@ -369,13 +391,16 @@ private:
               PxOsdSubdivTags const &subdivTags,
               VtValue const &color,
               HdInterpolation colorInterpolation,
+              VtValue const &opacity,
+              HdInterpolation opacityInterpolation,
               bool guide,
               bool doubleSided) :
             scheme(scheme), orientation(orientation),
             transform(transform),
             points(points), numVerts(numVerts), verts(verts),
             holes(holes), subdivTags(subdivTags), color(color),
-            colorInterpolation(colorInterpolation), guide(guide),
+            colorInterpolation(colorInterpolation), opacity(opacity),
+            opacityInterpolation(opacityInterpolation), guide(guide),
             doubleSided(doubleSided) { }
 
         TfToken scheme;
@@ -388,6 +413,8 @@ private:
         PxOsdSubdivTags subdivTags;
         VtValue color;
         HdInterpolation colorInterpolation;
+        VtValue opacity;
+        HdInterpolation opacityInterpolation;
         bool guide;
         bool doubleSided;
         HdReprSelector reprSelector;
@@ -401,6 +428,8 @@ private:
                 TfToken const &basis,
                 VtValue const &color,
                 HdInterpolation colorInterpolation,
+                VtValue const &opacity,
+                HdInterpolation opacityInterpolation,
                 VtValue const &width,
                 HdInterpolation widthInterpolation) :
             points(points), curveVertexCounts(curveVertexCounts), 
@@ -408,6 +437,7 @@ private:
             type(type),
             basis(basis),
             color(color), colorInterpolation(colorInterpolation),
+            opacity(opacity), opacityInterpolation(opacityInterpolation),
             width(width), widthInterpolation(widthInterpolation) { }
 
         VtVec3fArray points;
@@ -417,6 +447,8 @@ private:
         TfToken basis;
         VtValue color;
         HdInterpolation colorInterpolation;
+        VtValue opacity;
+        HdInterpolation opacityInterpolation;
         VtValue width;
         HdInterpolation widthInterpolation;
     };
@@ -425,15 +457,20 @@ private:
         _Points(VtVec3fArray const &points,
                 VtValue const &color,
                 HdInterpolation colorInterpolation,
+                VtValue const &opacity,
+                HdInterpolation opacityInterpolation,
                 VtValue const &width,
                 HdInterpolation widthInterpolation) :
             points(points),
             color(color), colorInterpolation(colorInterpolation),
+            opacity(opacity), opacityInterpolation(opacityInterpolation),
             width(width), widthInterpolation(widthInterpolation) { }
 
         VtVec3fArray points;
         VtValue color;
         HdInterpolation colorInterpolation;
+        VtValue opacity;
+        HdInterpolation opacityInterpolation;
         VtValue width;
         HdInterpolation widthInterpolation;
     };

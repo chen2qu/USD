@@ -26,8 +26,6 @@
 #include "pxr/usd/sdf/types.h"
 #include "pxr/usd/sdf/attributeSpec.h"
 #include "pxr/usd/sdf/listOp.h"
-#include "pxr/usd/sdf/mapperArgSpec.h"
-#include "pxr/usd/sdf/mapperSpec.h"
 #include "pxr/usd/sdf/primSpec.h"
 #include "pxr/usd/sdf/propertySpec.h"
 #include "pxr/usd/sdf/pyChildrenView.h"
@@ -42,12 +40,9 @@
 #include "pxr/usd/sdf/variantSetSpec.h"
 #include "pxr/usd/sdf/variantSpec.h"
 
+#include "pxr/base/tf/pyContainerConversions.h"
 #include "pxr/base/tf/pyEnum.h"
 #include "pxr/base/tf/pyStaticTokens.h"
-/*
-#include "pxr/base/tf/pyResultConversions.h"
-#include "pxr/base/tf/stringUtils.h"
-*/
 
 #include "pxr/base/vt/valueFromPython.h"
 
@@ -332,6 +327,14 @@ void wrapTypes()
     def( "GetNameForUnit", &SdfGetNameForUnit,
          return_value_policy<return_by_value>() );
 
+    // Register Python conversions for std::vector<SdfUnregisteredValue>
+    using _UnregisteredValueVector = std::vector<SdfUnregisteredValue>;
+    to_python_converter<_UnregisteredValueVector,
+                        TfPySequenceToPython<_UnregisteredValueVector> >();
+    TfPyContainerConversions::from_python_sequence<
+        _UnregisteredValueVector,
+        TfPyContainerConversions::variable_capacity_policy >();
+
     TfPyWrapEnum<SdfListOpType>();
     TfPyWrapEnum<SdfPermission>();
     TfPyWrapEnum<SdfSpecifier>();
@@ -355,12 +358,11 @@ void wrapTypes()
     SdfPyWrapListProxy<SdfSubLayerProxy>();
     SdfPyWrapListEditorProxy<SdfConnectionsProxy>();
     SdfPyWrapListEditorProxy<SdfInheritsProxy>();
+    SdfPyWrapListEditorProxy<SdfPayloadsProxy>();
     SdfPyWrapListEditorProxy<SdfReferencesProxy>();
     SdfPyWrapListEditorProxy<SdfVariantSetNamesProxy>();
 
     SdfPyWrapChildrenView<SdfAttributeSpecView>();
-    SdfPyWrapChildrenView<SdfConnectionMappersView>();
-    SdfPyWrapChildrenView<SdfMapperArgSpecView>();
     SdfPyWrapChildrenView<SdfPrimSpecView>();
     SdfPyWrapChildrenView<SdfPropertySpecView>();
     SdfPyWrapChildrenView<SdfRelationalAttributeSpecView>();
@@ -373,6 +375,7 @@ void wrapTypes()
     SdfPyWrapMapEditProxy<SdfRelocatesMapProxy>();
 
     SdfPyWrapListOp<SdfPathListOp>("PathListOp");
+    SdfPyWrapListOp<SdfPayloadListOp>("PayloadListOp");
     SdfPyWrapListOp<SdfReferenceListOp>("ReferenceListOp");
     SdfPyWrapListOp<SdfStringListOp>("StringListOp");
     SdfPyWrapListOp<SdfTokenListOp>("TokenListOp");
@@ -383,6 +386,7 @@ void wrapTypes()
     SdfPyWrapListOp<SdfUnregisteredValueListOp>("UnregisteredValueListOp");
 
     VtValueFromPython<SdfPathListOp>();
+    VtValueFromPython<SdfPayloadListOp>();
     VtValueFromPython<SdfReferenceListOp>();
     VtValueFromPython<SdfStringListOp>();
     VtValueFromPython<SdfTokenListOp>();

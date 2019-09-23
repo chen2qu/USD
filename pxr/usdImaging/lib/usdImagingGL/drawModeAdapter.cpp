@@ -36,12 +36,13 @@
 #include "pxr/imaging/hd/perfLog.h"
 #include "pxr/imaging/hd/material.h"
 
-#include "pxr/imaging/glf/glslfx.h"
+#include "pxr/imaging/hio/glslfx.h"
 #include "pxr/imaging/glf/image.h"
 #include "pxr/imaging/pxOsd/tokens.h"
 
 #include "pxr/usd/usdGeom/modelAPI.h"
 
+#include "pxr/base/gf/matrix4f.h"
 #include "pxr/base/tf/type.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
@@ -91,6 +92,25 @@ UsdImagingGLDrawModeAdapter::~UsdImagingGLDrawModeAdapter()
 {
 }
 
+bool
+UsdImagingGLDrawModeAdapter::ShouldCullChildren() const
+{
+    return true;
+}
+
+bool
+UsdImagingGLDrawModeAdapter::CanPopulateMaster() const
+{
+    return true;
+}
+
+bool
+UsdImagingGLDrawModeAdapter::IsSupported(
+    UsdImagingIndexProxy const* index) const
+{
+    return true;
+}
+
 SdfPath
 UsdImagingGLDrawModeAdapter::Populate(UsdPrim const& prim,
                                     UsdImagingIndexProxy* index,
@@ -100,7 +120,7 @@ UsdImagingGLDrawModeAdapter::Populate(UsdPrim const& prim,
     SdfPath cachePath = UsdImagingGprimAdapter::_ResolveCachePath(
         prim.GetPath(), instancerContext);
     SdfPath instancer = instancerContext ?
-        instancerContext->instancerId : SdfPath();
+        instancerContext->instancerCachePath : SdfPath();
 
     // The draw mode adapter only supports models. This is enforced in
     // UsdImagingDelegate::_IsDrawModeApplied.
@@ -284,6 +304,28 @@ UsdImagingGLDrawModeAdapter::MarkMaterialDirty(UsdPrim const& prim,
     }
 }
 
+void
+UsdImagingGLDrawModeAdapter::_CheckForTextureVariability(
+    UsdPrim const& prim, HdDirtyBits dirtyBits,
+    HdDirtyBits *timeVaryingBits) const
+{
+    const std::array<TfToken, 6> textureAttrs = {
+        UsdGeomTokens->modelCardTextureXPos,
+        UsdGeomTokens->modelCardTextureYPos,
+        UsdGeomTokens->modelCardTextureZPos,
+        UsdGeomTokens->modelCardTextureXNeg,
+        UsdGeomTokens->modelCardTextureYNeg,
+        UsdGeomTokens->modelCardTextureZNeg,
+    };
+
+    for (const TfToken& attr: textureAttrs) {
+        if (_IsVarying(prim, attr, dirtyBits,
+                       UsdImagingTokens->usdVaryingTexture,
+                       timeVaryingBits, false)) {
+            break;
+        }
+    }
+}
 
 void
 UsdImagingGLDrawModeAdapter::TrackVariability(UsdPrim const& prim,
@@ -292,20 +334,26 @@ UsdImagingGLDrawModeAdapter::TrackVariability(UsdPrim const& prim,
                                             UsdImagingInstancerContext const*
                                                instancerContext) const
 {
-    if (_IsMaterialPath(cachePath) || _IsTexturePath(cachePath)) {
-        // Shader/texture aspects aren't time-varying.
+    // If the textures are time-varying, we need to mark DirtyTexture on the
+    // texture, and DirtyParams on the shader (so that the shader picks up
+    // the new texture handle).
+    // XXX: the DirtyParams part of this can go away when we do the dependency
+    // tracking in hydra.
+    if (_IsTexturePath(cachePath)) {
+        _CheckForTextureVariability(prim, HdTexture::DirtyTexture,
+                                    timeVaryingBits);
+        return;
+    }
+
+    if (_IsMaterialPath(cachePath)) {
+        _CheckForTextureVariability(prim, HdMaterial::DirtyParams,
+                                    timeVaryingBits);
         return;
     }
 
     // WARNING: This method is executed from multiple threads, the value cache
     // has been carefully pre-populated to avoid mutating the underlying
     // container during update.
-
-    // Why is this OK?
-    // Either the value is unvarying, in which case the time ordinate doesn't
-    // matter; or the value is varying, in which case we will update it upon
-    // first call to Delegate::SetTime().
-    UsdTimeCode time(1.0);
 
     UsdImagingValueCache* valueCache = _GetValueCache();
 
@@ -315,7 +363,6 @@ UsdImagingGLDrawModeAdapter::TrackVariability(UsdPrim const& prim,
             UsdImagingTokens->usdVaryingXform,
             timeVaryingBits);
 
-    valueCache->GetVisible(cachePath) = GetVisible(prim, time);
     // Discover time-varying visibility.
     _IsVarying(prim,
             UsdGeomTokens->visibility,
@@ -324,7 +371,7 @@ UsdImagingGLDrawModeAdapter::TrackVariability(UsdPrim const& prim,
             timeVaryingBits,
             true);
 
-    TfToken purpose = _GetPurpose(prim, time);
+    TfToken purpose = GetPurpose(prim);
     // Empty purpose means there is no opinion, fall back to geom.
     if (purpose.IsEmpty())
         purpose = UsdGeomTokens->default_;
@@ -354,6 +401,8 @@ UsdImagingGLDrawModeAdapter::UpdateForTime(UsdPrim const& prim,
                 _GetSurfaceShaderSource();
             valueCache->GetDisplacementShaderSource(cachePath) =
                 std::string();
+            valueCache->GetMaterialMetadata(cachePath) =
+                                                VtValue(VtDictionary());
         }
 
         // DirtyParams indicates we should return material bindings;
@@ -440,18 +489,26 @@ UsdImagingGLDrawModeAdapter::UpdateForTime(UsdPrim const& prim,
     }
 
     if (requestedBits & HdChangeTracker::DirtyPrimvar) {
-        VtVec4fArray color = VtVec4fArray(1);
+        VtVec3fArray color = VtVec3fArray(1);
         // Default color to 18% gray.
         GfVec3f schemaColor= GfVec3f(0.18f, 0.18f, 0.18f);
         UsdAttribute drawModeColorAttr = model.GetModelDrawModeColorAttr();
         if (drawModeColorAttr) {
             drawModeColorAttr.Get(&schemaColor);
         }
-        color[0] = GfVec4f(schemaColor[0], schemaColor[1], schemaColor[2], 1);
+        color[0] = schemaColor;
         valueCache->GetColor(cachePath) = color;
 
-        _MergePrimvar(&primvars, HdTokens->color,
+        _MergePrimvar(&primvars, HdTokens->displayColor,
                       HdInterpolationConstant, HdPrimvarRoleTokens->color);
+
+        VtFloatArray opacity = VtFloatArray(1);
+        // Full opacity.
+        opacity[0] = 1.0f;
+        valueCache->GetOpacity(cachePath) = opacity;
+
+        _MergePrimvar(&primvars, HdTokens->displayOpacity,
+                      HdInterpolationConstant);
     }
 
     // We compute all of the below items together, since their derivations
@@ -885,6 +942,29 @@ UsdImagingGLDrawModeAdapter::_GenerateCardsFromTextureGeometry(
     }
 }
 
+namespace
+{
+
+template <class Vec>
+bool
+_ConvertToMatrix(const Vec &mvec, GfMatrix4d *mat)
+{
+    if (mvec.size() == 16) {
+        mat->Set(mvec[ 0], mvec[ 1], mvec[ 2], mvec[ 3],
+                 mvec[ 4], mvec[ 5], mvec[ 6], mvec[ 7],
+                 mvec[ 8], mvec[ 9], mvec[10], mvec[11],
+                 mvec[12], mvec[13], mvec[14], mvec[15]);
+        return true;
+    }
+
+    TF_WARN(
+        "worldtoscreen metadata expected 16 values, got %zu",
+        mvec.size());
+    return false;
+};
+
+}
+
 bool
 UsdImagingGLDrawModeAdapter::_GetMatrixFromImageMetadata(
     UsdAttribute const& attr, GfMatrix4d *mat) const
@@ -906,18 +986,39 @@ UsdImagingGLDrawModeAdapter::_GetMatrixFromImageMetadata(
         return false;
     }
 
-    // Read the "worldtoscreen" metadata, as a vector that we expect to be
-    // of size 16, and matrixify it.
-    std::vector<float> mvec;
-    if (!(img->GetMetadata(_tokens->worldtoscreen, &mvec)) ||
-        mvec.size() != 16) {
-        return false;
+    // Read the "worldtoscreen" metadata. This metadata specifies a 4x4
+    // matrix but may be given as any the following data types, since
+    // some image formats may support certain metadata types but not others.
+    //
+    // - std::vector<float> or std::vector<double> with 16 elements
+    //   in row major order.
+    // - GfMatrix4f or GfMatrix4d
+    VtValue worldtoscreen;
+    if (img->GetMetadata(_tokens->worldtoscreen, &worldtoscreen)) {
+        if (worldtoscreen.IsHolding<std::vector<float>>()) {
+            return _ConvertToMatrix(
+                worldtoscreen.UncheckedGet<std::vector<float>>(), mat);
+        }
+        else if (worldtoscreen.IsHolding<std::vector<double>>()) {
+            return _ConvertToMatrix(
+                worldtoscreen.UncheckedGet<std::vector<double>>(), mat);
+        }
+        else if (worldtoscreen.IsHolding<GfMatrix4f>()) {
+            *mat = GfMatrix4d(worldtoscreen.UncheckedGet<GfMatrix4f>());
+            return true;
+        }
+        else if (worldtoscreen.IsHolding<GfMatrix4d>()) {
+            *mat = worldtoscreen.UncheckedGet<GfMatrix4d>();
+            return true;
+        }
+        else {
+            TF_WARN(
+                "worldtoscreen metadata holding unexpected type '%s'",
+                worldtoscreen.GetTypeName().c_str());
+        }
     }
-    mat->Set(mvec[ 0], mvec[ 1], mvec[ 2], mvec[ 3],
-             mvec[ 4], mvec[ 5], mvec[ 6], mvec[ 7],
-             mvec[ 8], mvec[ 9], mvec[10], mvec[11],
-             mvec[12], mvec[13], mvec[14], mvec[15]);
-    return true;
+
+    return false;
 }
 
 void
@@ -978,7 +1079,7 @@ UsdImagingGLDrawModeAdapter::_GenerateTextureCoordinates(
 std::string
 UsdImagingGLDrawModeAdapter::_GetSurfaceShaderSource() const
 {
-    GlfGLSLFX gfx (UsdImagingGLPackageDrawModeShader());
+    HioGlslfx gfx (UsdImagingGLPackageDrawModeShader());
     if (!gfx.IsValid()) {
         TF_CODING_ERROR("Couldn't load UsdImagingPackageDrawModeShader");
         return std::string();
@@ -996,15 +1097,6 @@ UsdImagingGLDrawModeAdapter::_ComputeExtent(UsdPrim const& prim) const
                                UsdGeomTokens->render };
     UsdGeomBBoxCache bboxCache(UsdTimeCode::EarliestTime(), purposes, true);
     return bboxCache.ComputeUntransformedBound(prim).ComputeAlignedBox();
-}
-
-TfToken
-UsdImagingGLDrawModeAdapter::_GetPurpose(UsdPrim const& prim, UsdTimeCode time)
-    const
-{
-    HD_TRACE_FUNCTION();
-    // PERFORMANCE: Make this more efficient, see http://bug/90497
-    return UsdGeomImageable(prim).ComputePurpose();
 }
 
 HdTextureResource::ID

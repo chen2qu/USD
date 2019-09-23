@@ -25,23 +25,26 @@
 #include "pxr/imaging/glf/glew.h"
 
 #include "pxr/imaging/hdSt/drawItem.h"
+#include "pxr/imaging/hdSt/geometricShader.h"
+#include "pxr/imaging/hdSt/instancer.h"
 #include "pxr/imaging/hdSt/material.h"
 #include "pxr/imaging/hdSt/points.h"
 #include "pxr/imaging/hdSt/pointsShaderKey.h"
-#include "pxr/imaging/hdSt/instancer.h"
-
-#include "pxr/base/gf/vec2i.h"
-#include "pxr/base/tf/getenv.h"
+#include "pxr/imaging/hdSt/resourceRegistry.h"
+#include "pxr/imaging/hdSt/rprimUtils.h"
 
 #include "pxr/imaging/hd/bufferSource.h"
-#include "pxr/imaging/hdSt/geometricShader.h"
 #include "pxr/imaging/hd/perfLog.h"
 #include "pxr/imaging/hd/repr.h"
 #include "pxr/imaging/hd/sceneDelegate.h"
 #include "pxr/imaging/hd/tokens.h"
 #include "pxr/imaging/hd/vtBufferSource.h"
-#include "pxr/imaging/hdSt/resourceRegistry.h"
+
+#include "pxr/base/gf/vec2i.h"
+#include "pxr/base/tf/getenv.h"
 #include "pxr/base/vt/value.h"
+
+#include <iostream>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -58,24 +61,44 @@ HdStPoints::~HdStPoints()
 }
 
 void
-HdStPoints::Sync(HdSceneDelegate      *delegate,
-                 HdRenderParam        *renderParam,
-                 HdDirtyBits          *dirtyBits,
-                 HdReprSelector const &reprSelector,
-                 bool                  forcedRepr)
+HdStPoints::Sync(HdSceneDelegate *delegate,
+                 HdRenderParam   *renderParam,
+                 HdDirtyBits     *dirtyBits,
+                 TfToken const   &reprToken)
 {
     TF_UNUSED(renderParam);
 
     if (*dirtyBits & HdChangeTracker::DirtyMaterialId) {
         _SetMaterialId(delegate->GetRenderIndex().GetChangeTracker(),
                        delegate->GetMaterialId(GetId()));
+
+        _sharedData.materialTag = _GetMaterialTag(delegate->GetRenderIndex());
     }
 
-    HdReprSelector calcReprSelector = _GetReprSelector(
-            reprSelector, forcedRepr);
-    _UpdateRepr(delegate, calcReprSelector, dirtyBits);
+    _UpdateRepr(delegate, reprToken, dirtyBits);
 
+    // This clears all the non-custom dirty bits. This ensures that the rprim
+    // doesn't have pending dirty bits that add it to the dirty list every
+    // frame.
+    // XXX: GetInitialDirtyBitsMask sets certain dirty bits that aren't
+    // reset (e.g. DirtyExtent, DirtyPrimID) that make this necessary.
     *dirtyBits &= ~HdChangeTracker::AllSceneDirtyBits;
+}
+
+const TfToken&
+HdStPoints::_GetMaterialTag(const HdRenderIndex &renderIndex) const
+{
+    const HdStMaterial *material =
+        static_cast<const HdStMaterial *>(
+                renderIndex.GetSprim(HdPrimTypeTokens->material,
+                                     GetMaterialId()));
+
+    if (material) {
+        return material->GetMaterialTag();
+    }
+
+    // A material may have been unbound, we should clear the old tag
+    return HdMaterialTagTokens->defaultMaterialTag;
 }
 
 void
@@ -94,8 +117,8 @@ HdStPoints::_UpdateDrawItem(HdSceneDelegate *sceneDelegate,
     /* CONSTANT PRIMVARS, TRANSFORM AND EXTENT */
     HdPrimvarDescriptorVector constantPrimvars =
         GetPrimvarDescriptors(sceneDelegate, HdInterpolationConstant);
-    _PopulateConstantPrimvars(sceneDelegate, drawItem, dirtyBits,
-            constantPrimvars);
+    HdStPopulateConstantPrimvars(this, &_sharedData, sceneDelegate, drawItem, 
+        dirtyBits, constantPrimvars);
 
     /* MATERIAL SHADER */
     drawItem->SetMaterialShaderFromRenderIndex(
@@ -106,8 +129,7 @@ HdStPoints::_UpdateDrawItem(HdSceneDelegate *sceneDelegate,
         HdStInstancer *instancer = static_cast<HdStInstancer*>(
             sceneDelegate->GetRenderIndex().GetInstancer(GetInstancerId()));
         if (TF_VERIFY(instancer)) {
-            instancer->PopulateDrawItem(drawItem, &_sharedData,
-                dirtyBits, InstancePrimvar);
+            instancer->PopulateDrawItem(drawItem, &_sharedData, *dirtyBits);
         }
     }
 
@@ -130,15 +152,14 @@ HdStPoints::_UpdateDrawItem(HdSceneDelegate *sceneDelegate,
 
 void
 HdStPoints::_UpdateRepr(HdSceneDelegate *sceneDelegate,
-                        HdReprSelector const &reprToken,
+                        TfToken const &reprToken,
                         HdDirtyBits *dirtyBits)
 {
     HD_TRACE_FUNCTION();
     HF_MALLOC_TAG_FUNCTION();
 
     // XXX: We only support smoothHull for now
-    _PointsReprConfig::DescArray descs = _GetReprDesc(
-            HdReprSelector(HdReprTokens->smoothHull));
+    _PointsReprConfig::DescArray descs = _GetReprDesc(HdReprTokens->smoothHull);
     HdReprSharedPtr const &curRepr = _smoothHullRepr;
 
     if (TfDebug::IsEnabled(HD_RPRIM_UPDATED)) {
@@ -281,8 +302,7 @@ HdStPoints::_PropagateDirtyBits(HdDirtyBits bits) const
 }
 
 void
-HdStPoints::_InitRepr(HdReprSelector const &reprToken,
-                      HdDirtyBits *dirtyBits)
+HdStPoints::_InitRepr(TfToken const &reprToken, HdDirtyBits *dirtyBits)
 {
     // We only support smoothHull for now, everything else points to it.
     // TODO: Handle other styles
@@ -297,7 +317,12 @@ HdStPoints::_InitRepr(HdReprSelector const &reprToken,
 
             if (desc.geomStyle != HdPointsGeomStyleInvalid) {
                 HdDrawItem *drawItem = new HdStDrawItem(&_sharedData);
+                HdDrawingCoord *drawingCoord = drawItem->GetDrawingCoord();
                 _smoothHullRepr->AddDrawItem(drawItem);
+
+                // Set up drawing coord instance primvars.
+                drawingCoord->SetInstancePrimvarBaseIndex(
+                    HdStPoints::InstancePrimvar);
             }
         }
     }
@@ -308,7 +333,7 @@ HdStPoints::_InitRepr(HdReprSelector const &reprToken,
     if (isNew) {
         // add new repr
         it = _reprs.insert(_reprs.end(),
-            std::make_pair(reprToken, _smoothHullRepr));
+                std::make_pair(reprToken, _smoothHullRepr));
     }
 }
 

@@ -35,6 +35,7 @@ pxr_library(hd
         changeTracker
         compExtCompInputSource
         computation
+        coordSys
         debugCodes
         dirtyList
         drawingCoord
@@ -46,6 +47,7 @@ pxr_library(hd
         extCompPrimvarBufferSource
         extComputation
         extComputationContext
+        extComputationUtils
         field
         flatNormals
         geomSubset
@@ -57,7 +59,6 @@ pxr_library(hd
         mesh
         meshTopology
         meshUtil
-        patchIndex
         perfLog
         points
         primGather
@@ -67,6 +68,8 @@ pxr_library(hd
         renderIndex
         renderPass
         renderPassState
+        rendererPlugin
+        rendererPluginRegistry
         renderThread
         repr
         resource

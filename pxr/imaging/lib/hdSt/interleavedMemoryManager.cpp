@@ -29,9 +29,6 @@
 #include "pxr/imaging/hdSt/bufferResourceGL.h"
 #include "pxr/imaging/hdSt/glUtils.h"
 
-#include <boost/make_shared.hpp>
-#include <vector>
-
 #include "pxr/base/arch/hash.h"
 #include "pxr/base/tf/diagnostic.h"
 #include "pxr/base/tf/enum.h"
@@ -39,9 +36,11 @@
 
 #include "pxr/imaging/hd/perfLog.h"
 #include "pxr/imaging/hd/tokens.h"
-#include "pxr/imaging/hdSt/glConversions.h"
 
 #include "pxr/imaging/hf/perfLog.h"
+
+#include <boost/make_shared.hpp>
+#include <vector>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -110,7 +109,7 @@ HdStInterleavedUBOMemoryManager::CreateBufferArray(
     HdBufferSpecVector const &bufferSpecs,
     HdBufferArrayUsageHint usageHint)
 {
-    GlfContextCaps &caps = GlfContextCaps::GetInstance();
+    const GlfContextCaps &caps = GlfContextCaps::GetInstance();
 
     return boost::make_shared<
         HdStInterleavedMemoryManager::_StripedInterleavedBuffer>(
@@ -154,7 +153,7 @@ HdStInterleavedSSBOMemoryManager::CreateBufferArray(
     HdBufferSpecVector const &bufferSpecs,
     HdBufferArrayUsageHint usageHint)
 {
-    GlfContextCaps &caps = GlfContextCaps::GetInstance();
+    const GlfContextCaps &caps = GlfContextCaps::GetInstance();
 
     return boost::make_shared<
         HdStInterleavedMemoryManager::_StripedInterleavedBuffer>(

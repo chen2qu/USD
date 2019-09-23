@@ -46,7 +46,7 @@ class TestShaderNode(unittest.TestCase):
             "oso",           # Discovery type (extension)
             "OSL",           # Source type
             cls.URI,         # URI
-            cls.URI,          # Resolved URI
+            cls.URI,         # Resolved URI
             sourceCode=cls.sourceCode,
             metadata=cls.metadata,
             blindData=cls.blindData
@@ -71,7 +71,7 @@ class TestShaderNode(unittest.TestCase):
         assert self.node.GetSourceCode() == self.sourceCode
 
         utils.TestBasicNode(self.node,
-                            SdrOsl.OslParser.SourceType,
+                            "OSL",
                             self.URI)
 
     def test_ShaderSpecific(self):
@@ -81,6 +81,35 @@ class TestShaderNode(unittest.TestCase):
 
         utils.TestShaderSpecificNode(self.node)
 
+    def test_ShaderProperties(self):
+        """
+        Test property correctness on the "TestShaderPropertiesNodeOSL" node.
+
+        See shaderParserTestUtils TestShaderPropertiesNode method for detailed
+        description of the test.
+        """
+        URI = "TestShaderPropertiesNodeOSL.oso"
+        sourceCode = ""
+        metadata = {}
+        blindData = ""
+
+        discoveryResult = Ndr.NodeDiscoveryResult(
+            "TestShaderPropertiesNodeOSL",  # Identifier
+            Ndr.Version(),                  # Version
+            "TestShaderPropertiesNodeOSL",  # Name
+            "",                             # Family
+            "oso",                          # Discovery type (extension)
+            "OSL",                          # Source type
+            URI,                            # URI
+            URI,                            # Resolved URI
+            sourceCode,                     # sourceCode
+            metadata,                       # metadata
+            blindData                       # blindData
+        )
+        node = SdrOsl.OslParser().Parse(discoveryResult)
+        assert node is not None
+
+        utils.TestShaderPropertiesNode(node)
 
 if __name__ == '__main__':
     unittest.main()

@@ -39,7 +39,7 @@
 #include "pxr/imaging/hd/tokens.h"
 #include "pxr/imaging/hd/vtBufferSource.h"
 
-#include "pxr/imaging/glf/glslfx.h"
+#include "pxr/imaging/hio/glslfx.h"
 
 #include "pxr/base/tf/iterator.h"
 #include "pxr/base/tf/staticTokens.h"
@@ -126,7 +126,7 @@ std::string
 _GetPtexTextureShaderSource()
 {
     static std::string source =
-        GlfGLSLFX(HdStPackagePtexTextureShader()).GetSource(
+        HioGlslfx(HdStPackagePtexTextureShader()).GetSource(
             _tokens->ptexTextureSampler);
     return source;
 }
@@ -423,6 +423,8 @@ namespace {
         case HdBinding::BINDLESS_SSBO_RANGE:
         case HdBinding::TEXTURE_2D:
         case HdBinding::BINDLESS_TEXTURE_2D:
+        case HdBinding::TEXTURE_3D:
+        case HdBinding::BINDLESS_TEXTURE_3D:
         case HdBinding::TEXTURE_UDIM_ARRAY:
         case HdBinding::BINDLESS_TEXTURE_UDIM_ARRAY:
         case HdBinding::TEXTURE_UDIM_LAYOUT:
@@ -507,7 +509,7 @@ HdSt_CodeGen::Compile()
 
     // Used in glslfx files to determine if it is using new/old
     // imaging system. It can also be used as API guards when
-    // we need new versions of Hydra shading. 
+    // we need new versions of Storm shading. 
     _genCommon << "#define HD_SHADER_API " << HD_SHADER_API << "\n";
 
     // XXX: this is a hacky workaround for experimental support of GL 3.3
@@ -652,7 +654,25 @@ HdSt_CodeGen::Compile()
         _genCommon << "#define HD_HAS_" << it->second.name << " 1\n";
     }
     TF_FOR_ALL (it, _metaData.shaderParameterBinding) {
-        _genCommon << "#define HD_HAS_" << it->second.name << " 1\n";
+
+        // XXX: HdBinding::PRIMVAR_REDIRECT won't define an accessor if it's
+        // an alias of like-to-like, so we want to suppress the HD_HAS_* flag
+        // as well.
+        HdBinding::Type bindingType = it->first.GetType();
+        if (bindingType == HdBinding::PRIMVAR_REDIRECT) {
+            if (it->second.name != it->second.inPrimvars[0]) {
+                _genCommon << "#define HD_HAS_" << it->second.name << " 1\n";
+            }
+        } else {
+            _genCommon << "#define HD_HAS_" << it->second.name << " 1\n";
+        }
+    }
+
+    TF_FOR_ALL (it, _metaData.fieldRedirectBinding) {
+        HdBinding::Type bindingType = it->first.GetType();
+        if (bindingType == HdBinding::FIELD_REDIRECT) {
+            _genCommon << "#define HD_HAS_" << it->second.name << " 1\n";
+        }
     }
 
     // mixin shaders
@@ -664,7 +684,7 @@ HdSt_CodeGen::Compile()
     // prep interstage plumbing function
     _procVS  << "void ProcessPrimvars() {\n";
     _procTCS << "void ProcessPrimvars() {\n";
-    _procTES << "void ProcessPrimvars(float u, float v, int i0, int i1, int i2, int i3) {\n";
+    _procTES << "void ProcessPrimvars(vec4 basis, int i0, int i1, int i2, int i3) {\n";
     // geometry shader plumbing
     switch(_geometricShader->GetPrimitiveType())
     {
@@ -676,23 +696,25 @@ HdSt_CodeGen::Compile()
             _procGS << "vec4 GetPatchCoord(int index);\n"
                     << "void ProcessPrimvars(int index) {\n"
                     << "   vec2 localST = GetPatchCoord(index).xy;\n";
-            break;            
+            break;
         }
 
         case HdSt_GeometricShader::PrimitiveType::PRIM_MESH_COARSE_QUADS:
         {
             // quad interpolation
             _procGS  << "void ProcessPrimvars(int index) {\n"
-                     << "   vec2 localST = vec2[](vec2(0,0), vec2(1,0), vec2(1,1), vec2(0,1))[index];\n";
-            break;            
+                     << "   vec2 lut[4] = vec2[4](vec2(0,0), vec2(1,0), vec2(1,1), vec2(0,1));\n"
+                     << "   vec2 localST = lut[index];\n";
+            break;
         }
 
         case HdSt_GeometricShader::PrimitiveType::PRIM_MESH_COARSE_TRIANGLES:
         {
             // barycentric interpolation
              _procGS  << "void ProcessPrimvars(int index) {\n"
-                      << "   vec2 localST = vec2[](vec2(0,0), vec2(1,0), vec2(0,1))[index];\n";
-            break;            
+                      << "   vec2 lut[3] = vec2[3](vec2(0,0), vec2(1,0), vec2(0,1));\n"
+                      << "   vec2 localST = lut[index];\n";
+            break;
         }
 
         default: // points, basis curves
@@ -859,7 +881,7 @@ HdSt_CodeGen::CompileComputeProgram()
 
     // Used in glslfx files to determine if it is using new/old
     // imaging system. It can also be used as API guards when
-    // we need new versions of Hydra shading. 
+    // we need new versions of Storm shading. 
     _genCommon << "#define HD_SHADER_API " << HD_SHADER_API << "\n";    
 
     // a trick to tightly pack unaligned data (vec3, etc) into SSBO/UBO.
@@ -1073,6 +1095,10 @@ static void _EmitDeclaration(std::stringstream &str,
     case HdBinding::TEXTURE_2D:
     case HdBinding::BINDLESS_TEXTURE_2D:
         str << "uniform sampler2D " << name << ";\n";
+        break;
+    case HdBinding::TEXTURE_3D:
+    case HdBinding::BINDLESS_TEXTURE_3D:
+        str << "uniform sampler3D " << name << ";\n";
         break;
     case HdBinding::TEXTURE_UDIM_ARRAY:
     case HdBinding::BINDLESS_TEXTURE_UDIM_ARRAY:
@@ -1402,7 +1428,7 @@ static void _EmitFVarGSAccessor(
 
             TF_CODING_ERROR("Face varing bindings for unexpected for" 
                             " HdSt_GeometricShader::PrimitiveType %d", 
-                            primType);
+                            (int)primType);
         }
     }
 
@@ -1602,7 +1628,7 @@ HdSt_CodeGen::_GenerateDrawingCoord()
                << "  hd_instanceIndex r; r.indices[0] = 0; return r; }\n";
         if (_geometricShader->IsCullingPass()) {
             _genVS << "void SetCulledInstanceIndex(uint instance) "
-                      "{ /*no-op*/ };\n";
+                      "{ /*no-op*/ }\n";
         }
     }
 
@@ -1624,7 +1650,7 @@ HdSt_CodeGen::_GenerateDrawingCoord()
     if (_metaData.drawingCoordIBinding.binding.IsValid()) {
         _genVS << "  for (int i = 0; i < HD_INSTANCER_NUM_LEVELS; ++i) {\n"
                << "    dc.instanceCoords[i] = drawingCoordI[i] \n"
-               << "      + GetInstanceIndex().indices[i+1]; \n"
+               << "      + dc.instanceIndex[i+1]; \n"
                << "  }\n";
     }
 
@@ -1693,7 +1719,7 @@ HdSt_CodeGen::_GenerateConstantPrimvar()
           mat4 transform;
           mat4 transformInverse;
           mat4 instancerTransform[2];
-          vec4 color;
+          vec3 displayColor;
           vec4 primID;
       };
       // bindless
@@ -1707,8 +1733,8 @@ HdSt_CodeGen::_GenerateConstantPrimvar()
       mat4 HdGet_transform(int localIndex) {
           return constantData0[GetConstantCoord()].transform;
       }
-      vec4 HdGet_color(int localIndex) {
-          return constantData0[GetConstantCoord()].color;
+      vec3 HdGet_displayColor(int localIndex) {
+          return constantData0[GetConstantCoord()].displayColor;
       }
 
     */
@@ -1829,6 +1855,35 @@ HdSt_CodeGen::_GenerateInstancePrimvar()
         accessors << "  return defaultValue;\n"
                   << "}\n";
     }
+    /*
+      common accessor, if the primvar is defined on the instancer but not
+      the rprim.
+
+      #if !defined(HD_HAS_translate)
+      #define HD_HAS_translate 1
+      vec3 HdGet_translate(int localIndex) {
+          // 0 is the lowest level for which this is defined
+          return HdGet_translate_0();
+      }
+      vec3 HdGet_translate() {
+          return HdGet_translate(0);
+      }
+      #endif
+    */
+    TF_FOR_ALL (it, nameAndLevels) {
+        accessors << "#if !defined(HD_HAS_" << it->first << ")\n"
+                  << "#define HD_HAS_" << it->first << " 1\n"
+                  << _GetUnpackedType(it->second.dataType, false)
+                  << " HdGet_" << it->first << "(int localIndex) {\n"
+                  << "  return HdGet_" << it->first << "_"
+                                       << it->second.levels.front() << "();\n"
+                  << "}\n"
+                  << _GetUnpackedType(it->second.dataType, false)
+                  << " HdGet_" << it->first << "() { return HdGet_"
+                  << it->first << "(0); }\n"
+                  << "#endif\n";
+    }
+        
 
     _genCommon << declarations.str()
                << accessors.str();
@@ -1853,7 +1908,7 @@ HdSt_CodeGen::_GenerateElementPrimvar()
     For an unrefined prim, the subprimitive ID s simply the gl_PrimitiveID.
     For a refined prim, gl_PrimitiveID corresponds to the refined element ID.
 
-    To map a refined face to its coarse face, Hydra builds a "primitive param"
+    To map a refined face to its coarse face, Storm builds a "primitive param"
     buffer (more details in the section below). This buffer is also aggregated,
     and for each subprimitive, GetDrawingCoord().primitiveCoord gives us the
     index into this buffer (meaning it has already added the gl_PrimitiveID)
@@ -1884,15 +1939,15 @@ HdSt_CodeGen::_GenerateElementPrimvar()
 
       // --------- uniform primvar declaration ---------
       struct ElementData0 {
-          vec4 color;
+          vec3 displayColor;
       };
       layout (std430, binding=?) buffer buffer0 {
           ElementData0 elementData0[];
       };
 
       // ---------uniform primvar data accessor ---------
-      vec4 HdGet_color(int localIndex) {
-          return elementData0[GetAggregatedElementID()].color;
+      vec3 HdGet_displayColor(int localIndex) {
+          return elementData0[GetAggregatedElementID()].displayColor;
       }
 
     */
@@ -1938,7 +1993,7 @@ HdSt_CodeGen::_GenerateElementPrimvar()
     // PatchParam is defined as ivec3 (see opensubdiv/far/patchParam.h)
     //  Field0     | Bits | Content
     //  -----------|:----:|---------------------------------------------------
-    //  faceId     | 28   | the faceId of the patch (Hydra uses ptexIndex)
+    //  faceId     | 28   | the faceId of the patch (Storm uses ptexIndex)
     //  transition | 4    | transition edge mask encoding
     //
     //  Field1     | Bits | Content
@@ -2069,7 +2124,7 @@ HdSt_CodeGen::_GenerateElementPrimvar()
                 {
                     TF_CODING_ERROR("HdSt_GeometricShader::PrimitiveType %d is "
                       "unexpected in _GenerateElementPrimvar().",
-                      _geometricShader->GetPrimitiveType());
+                      (int)_geometricShader->GetPrimitiveType());
                 }
             }
 
@@ -2110,7 +2165,7 @@ HdSt_CodeGen::_GenerateElementPrimvar()
         else {
             TF_CODING_ERROR("HdSt_GeometricShader::PrimitiveType %d is "
                   "unexpected in _GenerateElementPrimvar().",
-                  _geometricShader->GetPrimitiveType());
+                  (int)_geometricShader->GetPrimitiveType());
         }
     } else {
         // no primitiveParamBinding
@@ -2176,7 +2231,11 @@ HdSt_CodeGen::_GenerateElementPrimvar()
             << "  if (primitiveEdgeID == -1) {\n"
             << "    return -1;\n"
             << "  }\n"
-            << "  return HdGet_edgeIndices()[abs(primitiveEdgeID)];\n;"
+            << "  "
+            << _GetUnpackedType(_metaData.edgeIndexBinding.dataType, false)
+            << " edgeIndices = HdGet_edgeIndices();\n"
+            << "  int coord = abs(primitiveEdgeID);\n"
+            << "  return edgeIndices[coord];\n"
             << "}\n";
 
         // Primitive EdgeID getter
@@ -2340,13 +2399,12 @@ HdSt_CodeGen::_GenerateVertexAndFaceVaryingPrimvar(bool hasGS)
                 << " = " << name << ";\n";
         _procTCS << "  outPrimvars[gl_InvocationID]." << name
                  << " = inPrimvars[gl_InvocationID]." << name << ";\n";
-        // procTES linearly interpolate vertex/varying primvars here.
-        // XXX: needs smooth interpolation for vertex primvars?
-        _procTES << "  outPrimvars." << name
-                 << " = mix(mix(inPrimvars[i3]." << name
-                 << "         , inPrimvars[i2]." << name << ", u),"
-                 << "       mix(inPrimvars[i1]." << name
-                 << "         , inPrimvars[i0]." << name << ", u), v);\n";
+       _procTES << "  outPrimvars." << name
+                 << " = basis[0] * inPrimvars[i0]." << name
+                 << " + basis[1] * inPrimvars[i1]." << name
+                 << " + basis[2] * inPrimvars[i2]." << name
+                 << " + basis[3] * inPrimvars[i3]." << name << ";\n";
+
         _procGS  << "  outPrimvars." << name
                  << " = inPrimvars[index]." << name << ";\n";
     }
@@ -2425,43 +2483,45 @@ HdSt_CodeGen::_GenerateVertexAndFaceVaryingPrimvar(bool hasGS)
         }
     }
 
-    _genVS  << vertexInputs.str()
-            << "out Primvars {\n"
-            << interstageVertexData.str()
-            << "} outPrimvars;\n"
-            << accessorsVS.str();
+    if (!interstageVertexData.str().empty()) {
+        _genVS  << vertexInputs.str()
+                << "out Primvars {\n"
+                << interstageVertexData.str()
+                << "} outPrimvars;\n"
+                << accessorsVS.str();
 
-    _genTCS << "in Primvars {\n"
-            << interstageVertexData.str()
-            << "} inPrimvars[gl_MaxPatchVertices];\n"
-            << "out Primvars {\n"
-            << interstageVertexData.str()
-            << "} outPrimvars[HD_NUM_PATCH_VERTS];\n"
-            << accessorsTCS.str();
+        _genTCS << "in Primvars {\n"
+                << interstageVertexData.str()
+                << "} inPrimvars[gl_MaxPatchVertices];\n"
+                << "out Primvars {\n"
+                << interstageVertexData.str()
+                << "} outPrimvars[HD_NUM_PATCH_VERTS];\n"
+                << accessorsTCS.str();
 
-    _genTES << "in Primvars {\n"
-            << interstageVertexData.str()
-            << "} inPrimvars[gl_MaxPatchVertices];\n"
-            << "out Primvars {\n"
-            << interstageVertexData.str()
-            << "} outPrimvars;\n"
-            << accessorsTES.str();
+        _genTES << "in Primvars {\n"
+                << interstageVertexData.str()
+                << "} inPrimvars[gl_MaxPatchVertices];\n"
+                << "out Primvars {\n"
+                << interstageVertexData.str()
+                << "} outPrimvars;\n"
+                << accessorsTES.str();
 
-    _genGS  << fvarDeclarations.str()
-            << "in Primvars {\n"
-            << interstageVertexData.str()
-            << "} inPrimvars[HD_NUM_PRIMITIVE_VERTS];\n"
-            << "out Primvars {\n"
-            << interstageVertexData.str()
-            << interstageFVarData.str()
-            << "} outPrimvars;\n"
-            << accessorsGS.str();
+        _genGS  << fvarDeclarations.str()
+                << "in Primvars {\n"
+                << interstageVertexData.str()
+                << "} inPrimvars[HD_NUM_PRIMITIVE_VERTS];\n"
+                << "out Primvars {\n"
+                << interstageVertexData.str()
+                << interstageFVarData.str()
+                << "} outPrimvars;\n"
+                << accessorsGS.str();
 
-    _genFS  << "in Primvars {\n"
-            << interstageVertexData.str()
-            << interstageFVarData.str()
-            << "} inPrimvars;\n"
-            << accessorsFS.str();
+        _genFS  << "in Primvars {\n"
+                << interstageVertexData.str()
+                << interstageFVarData.str()
+                << "} inPrimvars;\n"
+                << accessorsFS.str();
+    }
 
     // ---------
     _genFS << "vec4 GetPatchCoord(int index);\n";
@@ -2686,6 +2746,78 @@ HdSt_CodeGen::_GenerateShaderParameters()
                     << "vec2(0.0, 0.0)";
             }
             accessors << "); }\n";
+        } else if (bindingType == HdBinding::BINDLESS_TEXTURE_3D) {
+            // a function returning sampler3D is allowed in 430 or later
+            if (caps.glslVersion >= 430) {
+                accessors
+                    << "sampler3D\n"
+                    << "HdGetSampler_" << it->second.name << "() {\n"
+                    << "  int shaderCoord = GetDrawingCoord().shaderCoord; \n"
+                    << "  return sampler3D(shaderData[shaderCoord]." << it->second.name << ");\n"
+                    << "  }\n";
+            }
+            accessors
+                << _GetUnpackedType(it->second.dataType, false)
+                << " HdGet_" << it->second.name << "() {\n"
+                << "  int shaderCoord = GetDrawingCoord().shaderCoord; \n"
+                << "  return "
+                << _GetPackedTypeAccessor(it->second.dataType, false) << "("
+                << "texture(sampler3D(shaderData[shaderCoord]." << it->second.name << "), ";
+
+            if (!it->second.inPrimvars.empty()) {
+                accessors 
+                    << "\n"
+                    << "#if defined(HD_HAS_" << it->second.inPrimvars[0] << ")\n"
+                    << " HdGet_" << it->second.inPrimvars[0] << "().xyz\n"
+                    << "#else\n"
+                    << "vec3(0.0, 0.0, 0.0)\n"
+                    << "#endif\n";
+            } else {
+            // allow to fetch uv texture without sampler coordinate for convenience.
+                accessors
+                    << " vec3(0.0, 0.0, 0.0)";
+            }
+            accessors
+                << ")" << swizzle << ");\n"
+                << "}\n";
+        } else if (bindingType == HdBinding::TEXTURE_3D) {
+            declarations
+                << LayoutQualifier(it->first)
+                << "uniform sampler3D sampler3d_" << it->second.name << ";\n";
+            // a function returning sampler3D is allowed in 430 or later
+            if (caps.glslVersion >= 430) {
+                accessors
+                    << "sampler3D\n"
+                    << "HdGetSampler_" << it->second.name << "() {\n"
+                    << "  return sampler3d_" << it->second.name << ";"
+                    << "}\n";
+            }
+            // vec4 HdGet_name(vec3 coord) { return texture(sampler3d_name, coord).xyz; }
+            accessors
+                << _GetUnpackedType(it->second.dataType, false)
+                << " HdGet_" << it->second.name
+                << "(vec3 coord) { return "
+                << _GetPackedTypeAccessor(it->second.dataType, false)
+                << "(texture(sampler3d_" << it->second.name << ", coord)"
+                << swizzle << ");}\n";
+            // vec4 HdGet_name() { return HdGet_name(HdGet_st().xyz); }
+            accessors
+                << _GetUnpackedType(it->second.dataType, false)
+                << " HdGet_" << it->second.name
+                << "() { return HdGet_" << it->second.name << "(";
+            if (!it->second.inPrimvars.empty()) {
+                accessors
+                    << "\n"
+                    << "#if defined(HD_HAS_" << it->second.inPrimvars[0] << ")\n"
+                    << "HdGet_" << it->second.inPrimvars[0] << "().xyz\n"
+                    << "#else\n"
+                    << "vec3(0.0, 0.0, 0.0)\n"
+                    << "#endif\n";
+            } else {
+                accessors
+                    << "vec3(0.0, 0.0, 0.0)";
+            }
+            accessors << "); }\n";
         } else if (bindingType == HdBinding::BINDLESS_TEXTURE_UDIM_ARRAY) {
             // a function returning sampler2DArray is allowed in 430 or later
             if (caps.glslVersion >= 430) {
@@ -2849,6 +2981,34 @@ HdSt_CodeGen::_GenerateShaderParameters()
                     << "\n}\n"
                     ;
             }
+        }
+    }
+
+    TF_FOR_ALL (it, _metaData.fieldRedirectBinding) {
+        HdBinding::Type bindingType = it->first.GetType();
+        if (bindingType == HdBinding::FIELD_REDIRECT) {
+
+            accessors
+                << "vec3 HdGet_" << it->second.name << "(vec3 p) {\n"
+                << "#if defined(HD_HAS_" << it->second.fieldName << "Texture)\n"
+                << "\n"
+                << "#if defined(HD_HAS_" << it->second.fieldName << "SamplingTransform)\n"
+                << "    vec4 q = vec4(HdGet_" << it->second.fieldName << "SamplingTransform() * vec4(p.xyz, 1));\n"
+                << "    vec3 s = q.xyz/q.w;\n"
+                << "#else\n"
+                << "    vec3 s = p;\n"
+                << "#endif\n"
+                << "\n"
+                << "    return vec3(HdGet_" << it->second.fieldName << "Texture(s).xyz);\n"
+                << "#else\n"
+                << "#if defined(HD_HAS_" << it->second.name << "Fallback)\n"
+                << "    return vec3(HdGet_" << it->second.name << "Fallback().xyz);\n"
+                << "#else\n"
+                << "    return vec3(0.0);\n"
+                << "#endif\n"
+                << "#endif\n"
+                << "};\n"
+                ;
         }
     }
     

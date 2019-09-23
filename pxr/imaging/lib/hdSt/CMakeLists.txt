@@ -16,9 +16,11 @@ endif()
 
 pxr_library(hdSt
     LIBRARIES
+        hio
         garch
         glf
         hd
+        hgiGL
         tf
         trace
         ${GLEW_LIBRARY}
@@ -35,7 +37,9 @@ pxr_library(hdSt
         commandBuffer
         computeShader
         copyComputation
+        debugCodes
         dispatchBuffer
+        domeLightComputations
         drawItem
         drawItemInstance
         drawTarget
@@ -48,12 +52,16 @@ pxr_library(hdSt
         extCompGpuComputationResource
         extCompGpuPrimvarBufferSource
         fallbackLightingShader
+        field
+        fieldResource
         flatNormals
         geometricShader
         glConversions
         glslfxShader
         glslProgram
         glUtils
+        hgiConversions
+        imageShaderRenderPass
         instancer
         interleavedMemoryManager
         light      
@@ -64,6 +72,7 @@ pxr_library(hdSt
         package
         persistentBuffer
         points
+        renderBuffer
         renderDelegate
         renderPass
         renderPassShader
@@ -71,16 +80,19 @@ pxr_library(hdSt
         resourceBinder
         resourceGL
         resourceRegistry
+        rprimUtils
         shaderCode
         shaderKey
         smoothNormals
         surfaceShader
         texture
         textureResource
+        textureResourceHandle
         tokens
         unitTestGLDrawing
         vboMemoryManager
         vboSimpleMemoryManager
+        volume
 
     PUBLIC_HEADERS
         api.h
@@ -93,8 +105,10 @@ pxr_library(hdSt
         cullingShaderKey
         drawBatch
         drawTargetTextureResource
+        imageShaderShaderKey
         immediateDrawBatch
         indirectDrawBatch
+        materialBufferSourceAndTextureHelper
         meshShaderKey
         meshTopology 
         pointsShaderKey
@@ -104,16 +118,21 @@ pxr_library(hdSt
         triangulate
         unitTestDelegate
         unitTestHelper
+        volumeShader
+        volumeShaderKey
 
     RESOURCE_FILES
         plugInfo.json
         shaders/basisCurves.glslfx
         shaders/compute.glslfx
+        shaders/domeLight.glslfx
         shaders/edgeId.glslfx
         shaders/fallbackLighting.glslfx
         shaders/fallbackLightingShader.glslfx
         shaders/fallbackSurface.glslfx
+        shaders/fallbackVolume.glslfx
         shaders/frustumCull.glslfx
+        shaders/imageShader.glslfx
         shaders/instancing.glslfx
         shaders/lighting.glslfx
         shaders/lightingIntegrationShader.glslfx
@@ -127,6 +146,7 @@ pxr_library(hdSt
         shaders/renderPassShader.glslfx
         shaders/terminals.glslfx
         shaders/visibility.glslfx
+        shaders/volume.glslfx
 )
 
 if (X11_FOUND OR APPLE)

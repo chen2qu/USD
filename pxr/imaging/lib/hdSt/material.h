@@ -36,10 +36,11 @@ PXR_NAMESPACE_OPEN_SCOPE
 typedef boost::shared_ptr<class HdStShaderCode> HdStShaderCodeSharedPtr;
 typedef boost::shared_ptr<class HdStSurfaceShader> HdStSurfaceShaderSharedPtr;
 typedef boost::shared_ptr<class HdStTextureResource> HdStTextureResourceSharedPtr;
-typedef std::vector<HdStTextureResourceSharedPtr>
-                                HdStTextureResourceSharedPtrVector;
+typedef boost::shared_ptr<class HdStTextureResourceHandle> HdStTextureResourceHandleSharedPtr;
+typedef std::vector<HdStTextureResourceHandleSharedPtr>
+                                HdStTextureResourceHandleSharedPtrVector;
 
-class GlfGLSLFX;
+class HioGlslfx;
 
 class HdStMaterial final: public HdMaterial {
 public:
@@ -112,6 +113,9 @@ public:
     // Returns true if the material has a displacement terminal.
     inline bool HasDisplacement() const;
 
+    // Returns the material's render pass tag.
+    inline const TfToken& GetMaterialTag() const;
+
     /// Replaces the shader code object with an externally created one
     /// Used to set the fallback shader for prim.
     /// This class takes ownership of the passed in object.
@@ -119,23 +123,28 @@ public:
     void SetSurfaceShader(HdStSurfaceShaderSharedPtr &shaderCode);
 
 private:
-    HdStTextureResourceSharedPtr
-    _GetTextureResource(HdSceneDelegate *sceneDelegate,
-                        HdMaterialParam const &param);
+    HdStTextureResourceHandleSharedPtr
+    _GetTextureResourceHandle(HdSceneDelegate *sceneDelegate,
+                              HdMaterialParam const &param);
 
     bool
     _GetHasLimitSurfaceEvaluation(VtDictionary const & metadata) const;
 
+    TfToken _GetMaterialTag(VtDictionary const & metadata) const;
+
     void _InitFallbackShader();
 
-    static GlfGLSLFX                  *_fallbackSurfaceShader;
+    static HioGlslfx                  *_fallbackSurfaceShader;
 
     HdStSurfaceShaderSharedPtr         _surfaceShader;
-    HdStTextureResourceSharedPtrVector _fallbackTextureResources;
+    HdStTextureResourceHandleSharedPtrVector _fallbackTextureResourceHandles;
 
+    bool                               _isInitialized : 1;
     bool                               _hasPtex : 1;
     bool                               _hasLimitSurfaceEvaluation : 1;
     bool                               _hasDisplacement : 1;
+
+    TfToken                            _materialTag;
 };
 
 inline std::string
@@ -189,6 +198,11 @@ inline bool HdStMaterial::HasLimitSurfaceEvaluation() const
 inline bool HdStMaterial::HasDisplacement() const
 {
     return _hasDisplacement;
+}
+
+inline const TfToken& HdStMaterial::GetMaterialTag() const
+{
+    return _materialTag;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

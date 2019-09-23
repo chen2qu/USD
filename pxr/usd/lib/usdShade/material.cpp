@@ -470,7 +470,7 @@ UsdShadeMaterial::FindBaseMaterialPathInPrimIndex(
         const PathPredicate & pathIsMaterialPredicate)
 {
     for(const PcpNodeRef &node: primIndex.GetNodeRange()) {
-        if (PcpIsSpecializesArc(node.GetArcType())) {
+        if (PcpIsSpecializeArc(node.GetArcType())) {
             // We only consider children of the prim's root node because any
             // specializes arc we care about that is authored inside referenced
             // scene description will "imply" up into the root layer stack.
@@ -737,42 +737,6 @@ UsdShadeMaterial::GetMaterialBindSubsetsFamilyType(
         const UsdGeomImageable &geom)
 {
     return UsdGeomSubset::GetFamilyType(geom, UsdShadeTokens->materialBind);
-}
-   
-// --------------------------------------------------------------------- //
-
-/* static */
-UsdGeomFaceSetAPI 
-UsdShadeMaterial::CreateMaterialFaceSet(const UsdPrim &prim)
-{
-    if (HasMaterialFaceSet(prim))
-        return UsdGeomFaceSetAPI(prim, _tokens->material);
-
-    // No face can be bound to more than one Material, hence set isPartition to 
-    // true.
-    UsdGeomFaceSetAPI faceSet(prim, _tokens->material);
-    faceSet.SetIsPartition(true);
-
-    return faceSet;
-}
-
-/* static */
-UsdGeomFaceSetAPI 
-UsdShadeMaterial::GetMaterialFaceSet(const UsdPrim &prim) 
-{
-    if (HasMaterialFaceSet(prim))
-        return UsdGeomFaceSetAPI(prim, _tokens->material);
-
-    return UsdGeomFaceSetAPI();
-}
-
-/* static */
-bool 
-UsdShadeMaterial::HasMaterialFaceSet(const UsdPrim &prim)
-{
-    UsdGeomFaceSetAPI faceSet(prim, _tokens->material);
-    bool isPartition=false;
-    return faceSet.GetIsPartitionAttr().Get(&isPartition) && isPartition;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

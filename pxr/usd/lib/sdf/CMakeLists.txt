@@ -34,7 +34,6 @@ pxr_library(sdf
         fileFormat
         identity
         layer
-        layerBase
         layerOffset
         layerStateDelegate
         layerTree
@@ -43,8 +42,6 @@ pxr_library(sdf
         listEditor
         listEditorProxy
         listOp
-        mapperArgSpec
-        mapperSpec
         mapEditProxy
         mapEditor
         namespaceEdit
@@ -53,6 +50,7 @@ pxr_library(sdf
         pathNode
         pathTable
         payload
+        pool
         primSpec
         propertySpec
         proxyPolicies
@@ -66,6 +64,7 @@ pxr_library(sdf
         spec
         specType
         textFileFormat
+        timeCode
         tokens
         types
         valueTypeName
@@ -83,7 +82,6 @@ pxr_library(sdf
         pyListOp
         pyListProxy
         pyMapEditProxy
-        pyMarkerProxy
         pySpec
         pyUtils
 
@@ -104,7 +102,6 @@ pxr_library(sdf
         fileIO_Common
         layerRegistry
         listOpListEditor
-        markerUtils
         parserHelpers
         parserValueContext
         pathParser
@@ -114,6 +111,7 @@ pxr_library(sdf
         vectorListEditor
 
     PRIVATE_HEADERS
+        instantiatePool.h
         valueTypePrivate.h
 
     CPPFILES
@@ -127,6 +125,7 @@ pxr_library(sdf
     PYMODULE_CPPFILES
         module.cpp
         wrapArrayAssetPath.cpp
+        wrapArrayTimeCode.cpp
         wrapAssetPath.cpp
         wrapAttributeSpec.cpp
         wrapChangeBlock.cpp
@@ -134,11 +133,8 @@ pxr_library(sdf
         wrapCopyUtils.cpp
         wrapFileFormat.cpp
         wrapLayer.cpp
-        wrapLayerBase.cpp
         wrapLayerOffset.cpp
         wrapLayerTree.cpp
-        wrapMapperSpec.cpp
-        wrapMapperArgSpec.cpp
         wrapNamespaceEdit.cpp
         wrapNotice.cpp
         wrapPath.cpp
@@ -149,6 +145,7 @@ pxr_library(sdf
         wrapRelationshipSpec.cpp
         wrapReference.cpp
         wrapSpec.cpp
+        wrapTimeCode.cpp
         wrapTypes.cpp
         wrapValueTypeName.cpp
         wrapVariantSpec.cpp
@@ -198,8 +195,10 @@ pxr_test_scripts(
     testenv/testSdfPath2.py
     testenv/testSdfPath2Construct.py
     testenv/testSdfPayload.py
+    testenv/testSdfPrim.py
     testenv/testSdfReference.py
     testenv/testSdfSpecHash.py
+    testenv/testSdfTimeCode.py
     testenv/testSdfTypes.py
 )
 
@@ -268,12 +267,7 @@ pxr_install_test_dir(
 
 pxr_install_test_dir(
     SRC testenv/testSdfParsingOld.testenv
-    DEST testSdfParsingOld/testSdfParsingOld.testenv
-)
-
-pxr_install_test_dir(
-    SRC testenv/testSdfParsingOld.testenv
-    DEST testSdfParsingNew/testSdfParsingNew.testenv
+    DEST testSdfParsingOld/testSdfParsing.testenv
 )
 
 pxr_install_test_dir(
@@ -333,13 +327,6 @@ pxr_register_test(testSdfMetaDataPlugInfo
     COMMAND "${CMAKE_INSTALL_PREFIX}/tests/testSdfMetaDataPlugInfo"
 )
 
-pxr_register_test(testSdfParsingNew
-    PYTHON
-    COMMAND "${CMAKE_INSTALL_PREFIX}/tests/testSdfParsing"
-    ENV
-        SDF_CONVERT_TO_NEW_TYPENAMES=1
-)
-
 pxr_register_test(testSdfParsing
     PYTHON
     COMMAND "${CMAKE_INSTALL_PREFIX}/tests/testSdfParsing"
@@ -348,8 +335,6 @@ pxr_register_test(testSdfParsing
 pxr_register_test(testSdfParsingOld
     PYTHON
     COMMAND "${CMAKE_INSTALL_PREFIX}/tests/testSdfParsing"
-    ENV
-        SDF_WRITE_OLD_TYPENAMES=1
 )
 
 pxr_register_test(testSdfPath
@@ -381,6 +366,10 @@ pxr_register_test(testSdfPayload
     PYTHON
     COMMAND "${CMAKE_INSTALL_PREFIX}/tests/testSdfPayload"
 )
+pxr_register_test(testSdfPrim
+    PYTHON
+    COMMAND "${CMAKE_INSTALL_PREFIX}/tests/testSdfPrim"
+)
 pxr_register_test(testSdfReference
     PYTHON
     COMMAND "${CMAKE_INSTALL_PREFIX}/tests/testSdfReference"
@@ -388,6 +377,10 @@ pxr_register_test(testSdfReference
 pxr_register_test(testSdfSpecHash
     PYTHON
     COMMAND "${CMAKE_INSTALL_PREFIX}/tests/testSdfSpecHash"
+)
+pxr_register_test(testSdfTimeCode
+    PYTHON
+    COMMAND "${CMAKE_INSTALL_PREFIX}/tests/testSdfTimeCode"
 )
 pxr_register_test(testSdfTypes
     PYTHON

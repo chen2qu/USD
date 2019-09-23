@@ -194,7 +194,17 @@ _TranslatePathsAndEditRelocates(
     SdfPath oldParentPath = _TranslatePathAndTargetPaths(node, *oldNodePath);
     SdfPath newParentPath = _TranslatePathAndTargetPaths(node, *newNodePath);
 
-    // Check if there are relocations that need fixing.
+    // Check if there are relocations that need fixing. Since relocates only
+    // target prims, we can bail out early if the translated path isn't a
+    // prim path. Note that we just check oldNodePath, since newNodePath may
+    // be empty if the namespace edit is a deletion.
+    const bool mayAffectRelocates = oldNodePath->IsPrimPath();
+    if (!mayAffectRelocates) {
+        *oldNodePath = oldParentPath;
+        *newNodePath = newParentPath;
+        return;
+    }
+
     //
     // At this point, if oldParentPath and newParentPath refer to a 
     // relocated prim or a descendant of a relocated prim, they will have 
@@ -355,13 +365,11 @@ _AddLayerStackSite(
         TF_DEBUG(PCP_NAMESPACE_EDIT)
             .Msg("  - final.  direct arc fixup\n");
         switch (node.GetArcType()) {
-        case PcpArcTypeLocalInherit:
-        case PcpArcTypeGlobalInherit:
+        case PcpArcTypeInherit:
             type = PcpNamespaceEdits::EditInherit;
             break;
 
-        case PcpArcTypeLocalSpecializes:
-        case PcpArcTypeGlobalSpecializes:
+        case PcpArcTypeSpecialize:
             type = PcpNamespaceEdits::EditSpecializes;
             break;
 
@@ -390,25 +398,27 @@ _AddLayerStackSite(
         newPath = *newNodePath;
     }
 
-    // Add a new layer stack site element at the end.
-    PcpNamespaceEdits::LayerStackSites& layerStackSites = 
-        _GetLayerStackSitesForEdit(result, oldPath, newPath);
+    if (result) {
+        // Add a new layer stack site element at the end.
+        PcpNamespaceEdits::LayerStackSites& layerStackSites = 
+            _GetLayerStackSitesForEdit(result, oldPath, newPath);
 
-    layerStackSites.resize(layerStackSites.size() + 1);
-    PcpNamespaceEdits::LayerStackSite& site = layerStackSites.back();
+        layerStackSites.resize(layerStackSites.size() + 1);
+        PcpNamespaceEdits::LayerStackSite& site = layerStackSites.back();
 
-    // Fill in the site.
-    site.cacheIndex = cacheIndex;
-    site.type       = type;
-    site.sitePath   = sitePath;
-    site.oldPath    = oldPath;
-    site.newPath    = newPath;
-    site.layerStack = node.GetParentNode().GetLayerStack();
+        // Fill in the site.
+        site.cacheIndex = cacheIndex;
+        site.type       = type;
+        site.sitePath   = sitePath;
+        site.oldPath    = oldPath;
+        site.newPath    = newPath;
+        site.layerStack = node.GetParentNode().GetLayerStack();
 
-    TF_DEBUG(PCP_NAMESPACE_EDIT)
-        .Msg("  - adding layer stack edit <%s> -> <%s>\n",
-            site.oldPath.GetText(),
-            site.newPath.GetText());
+        TF_DEBUG(PCP_NAMESPACE_EDIT)
+            .Msg("  - adding layer stack edit <%s> -> <%s>\n",
+                site.oldPath.GetText(),
+                site.newPath.GetText());
+    }
 
     return final;
 }
@@ -593,15 +603,16 @@ PcpComputeNamespaceEdits(
                 // nodes, since the code that handles direct inherits below
                 // needs to have the nodes where the inherits are introduced.
                 for (const SdfPath& descendentPrimPath : descendentPrimPaths) {
-                    // We were just told this prim index is a deependency
+                    // We were just told this prim index is a dependency
                     // so it certainly should exist.
                     const PcpPrimIndex *index =
                         primaryCache->FindPrimIndex(descendentPrimPath);
                     if (TF_VERIFY(index, "Reported descendent dependency "
                                   "lacks a prim index")) {
                         for (const PcpNodeRef &node:
-                             index->GetNodeRange(PcpRangeTypeLocalInherit)) {
+                             index->GetNodeRange(PcpRangeTypeInherit)) {
                             if (node.GetLayerStack() == primaryLayerStack &&
+                                !node.GetPath().IsRootPrimPath() &&
                                 !node.IsDueToAncestor()) {
                                 // Found an inherit using a descendant.
                                 descendantNodes.insert(
@@ -753,16 +764,20 @@ PcpComputeNamespaceEdits(
             LayerStackSites& layerStackSites = 
                 _GetLayerStackSitesForEdit(&result, oldNodePath, newNodePath);
             layerStackSites.resize(layerStackSites.size()+1);
-            LayerStackSite& site = layerStackSites.back();
-            site.cacheIndex      = cacheIndex;
-            site.type            = PcpNamespaceEdits::EditPath;
-            site.sitePath        = oldNodePath;
-            site.oldPath         = oldNodePath;
-            site.newPath         = newNodePath;
-            site.layerStack      = node.GetLayerStack();
-
+            {
+                LayerStackSite& site = layerStackSites.back();
+                site.cacheIndex      = cacheIndex;
+                site.type            = PcpNamespaceEdits::EditPath;
+                site.sitePath        = oldNodePath;
+                site.oldPath         = oldNodePath;
+                site.newPath         = newNodePath;
+                site.layerStack      = node.GetLayerStack();
+                // Drop the 'site' reference here since the call to
+                // _AddRelocateEditsForLayerStack can invalidate the reference
+                // from layerStackSites, when it resizes the vector.
+            }
             _AddRelocateEditsForLayerStack(
-                &result, site.layerStack, cacheIndex,
+                &result, node.GetLayerStack(), cacheIndex,
                 oldNodePath, newNodePath);
         }
 
@@ -773,25 +788,21 @@ PcpComputeNamespaceEdits(
                    node.GetPath().GetText(),
                    oldNodePath.GetText(),
                    newNodePath.GetText());
-            if (sites.insert(node.GetParentNode().GetSite()).second) {
-                // Add site and translate paths to parent node.
-                if (_AddLayerStackSite(&result, node, cacheIndex,
-                                       &oldNodePath, &newNodePath)) {
-                    // Reached a direct arc, so we don't have to continue.
-                    // The composed object will continue to exist at the
-                    // same path, with the arc target updated.
-                    TF_DEBUG(PCP_NAMESPACE_EDIT)
-                        .Msg("  - done!  fixed direct arc.\n");
-                    break;
-                }
-            }
-            else {
+
+            // Add site to result if we haven't handled it before, and 
+            // translate paths to parent node.
+            const bool newSite = 
+                sites.insert(node.GetParentNode().GetSite()).second;
+
+            if (_AddLayerStackSite(
+                    newSite ? &result : nullptr,  
+                    node, cacheIndex, &oldNodePath, &newNodePath)) {
+                // Reached a direct arc, so we don't have to continue.
+                // The composed object will continue to exist at the
+                // same path, with the arc target updated.
                 TF_DEBUG(PCP_NAMESPACE_EDIT)
-                    .Msg("  - adjusted path for relocate\n");
-                // Translate paths to parent node.
-                // Adjust relocates as needed.
-                _TranslatePathsAndEditRelocates(NULL, node, cacheIndex,
-                                                &oldNodePath, &newNodePath);
+                    .Msg("  - done!  fixed direct arc.\n");
+                break;
             }
 
             // Next node.
@@ -802,8 +813,8 @@ PcpComputeNamespaceEdits(
         if (!node.GetParentNode()) {
             if (!_IsInvalidEdit(oldNodePath, newNodePath)) {
                 TF_DEBUG(PCP_NAMESPACE_EDIT)
-                    .Msg("  - adding cacheSite for %s\n",
-                         node.GetPath().GetText());
+                    .Msg("  - adding cacheSite <%s> -> <%s>\n",
+                         oldNodePath.GetText(), newNodePath.GetText());
                 result.cacheSites.resize(result.cacheSites.size() + 1);
                 CacheSite& cacheSite = result.cacheSites.back();
                 cacheSite.cacheIndex = cacheIndex;

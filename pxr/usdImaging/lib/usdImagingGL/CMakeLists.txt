@@ -16,6 +16,7 @@ pxr_library(usdImagingGL
         trace
         vt
         work
+        hio
         garch
         glf
         hd
@@ -44,13 +45,11 @@ pxr_library(usdImagingGL
         ${TBB_INCLUDE_DIRS}
 
     PUBLIC_CLASSES
+        domeLightAdapter
         drawModeAdapter
         engine
-        gl
-        hdEngine
         hydraMaterialAdapter
         package
-        refEngine
         renderParams
 
     PUBLIC_HEADERS
@@ -59,6 +58,7 @@ pxr_library(usdImagingGL
         version.h
 
     PRIVATE_CLASSES
+        legacyEngine
         textureUtils
 
     PRIVATE_HEADERS
@@ -69,7 +69,9 @@ pxr_library(usdImagingGL
 
     PYMODULE_CPPFILES
         module.cpp
-        wrapGL.cpp
+        wrapEngine.cpp
+        wrapRenderParams.cpp
+        wrapRendererSettings.cpp
 
     PYMODULE_FILES
         __init__.py

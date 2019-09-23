@@ -33,9 +33,7 @@
 #include "pxr/base/tf/traits.h"
 #include "pxr/base/tf/typeFunctions.h"
 
-#include <boost/mpl/vector.hpp>
 #include <boost/operators.hpp>
-#include <boost/scoped_ptr.hpp>
 
 #include <iosfwd>
 #include <memory>
@@ -105,7 +103,7 @@ public:
     /// A type-list of C++ base types.
     /// \see TfType::Define()
     template <class ... Args>
-    struct Bases : boost::mpl::vector<Args ...> {};
+    struct Bases {};
 
 public:
     /// Construct an TfType representing an unknown type.
@@ -315,6 +313,19 @@ public:
     ///
     TF_API
     std::vector<TfType> GetBaseTypes() const;
+    
+    /// Copy the first \p maxBases base types of \p this type to \p out, or all
+    /// the base types if this type has \p maxBases or fewer base types.  Return
+    /// \p this type's number of base types.
+    ///
+    /// Note that it is supported to change a TfType to its first base type by
+    /// calling this function.  For example:
+    /// \code
+    ///     TfType t = ...;
+    ///     t.GetNBaseTypes(&t, 1);
+    /// \endcode
+    TF_API
+    size_t GetNBaseTypes(TfType *out, size_t maxBases) const;
 
     /// Return a vector of types derived directly from this type.
     ///
@@ -685,8 +696,10 @@ private:
     // Construct a TfType with the given _TypeInfo.
     explicit TfType(_TypeInfo *info) : _info(info) {}
 
-    // Add a base type, and link as a derived type of that base.
-    void _AddBase( TfType base ) const;
+    // Adds base type(s), and link as a derived type of that bases.
+    void _AddBases(
+        const std::vector<TfType> &bases,
+        std::vector<std::string> *errorToEmit) const;
 
     // Add the given function for casting to/from the given baseType.
     TF_API

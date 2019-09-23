@@ -28,7 +28,7 @@
 #include "pxr/usdImaging/usdImaging/textureUtils.h"
 #include "pxr/usdImaging/usdImaging/tokens.h"
 
-#include "pxr/imaging/glf/glslfx.h"
+#include "pxr/imaging/hio/glslfx.h"
 #include "pxr/imaging/glf/ptexTexture.h"
 #include "pxr/imaging/glf/udimTexture.h"
 #include "pxr/imaging/glf/textureHandle.h"
@@ -79,7 +79,7 @@ _GetWrap(UsdPrim const &usdPrim,
                 auto &shaderReg = SdrRegistry::GetInstance();
                 if (SdrShaderNodeConstPtr sdrNode = 
                     shaderReg.GetShaderNodeByIdentifierAndType(shaderId, 
-                                GlfGLSLFXTokens->glslfx)) {
+                                HioGlslfxTokens->glslfx)) {
                     if (const auto &sdrInput = 
                             sdrNode->GetShaderInput(wrapAttr)) {
                         VtValue wrapVal = sdrInput->GetDefaultValue();
@@ -423,6 +423,8 @@ UsdImagingGL_GetTextureResource(UsdPrim const& usdPrim,
 
     HdWrap wrapS = _GetWrapS(usdPrim, textureType);
     HdWrap wrapT = _GetWrapT(usdPrim, textureType);
+    // wrapR value does not matter since ignored for anything but Uvw textures.
+    HdWrap wrapR = HdWrapUseMetadata;
     HdMinFilter minFilter = _GetMinFilter(usdPrim);
     HdMagFilter magFilter = _GetMagFilter(usdPrim);
     float memoryLimit = _GetMemoryLimit(usdPrim);
@@ -451,7 +453,7 @@ UsdImagingGL_GetTextureResource(UsdPrim const& usdPrim,
     }
 
     texResource = HdTextureResourceSharedPtr(
-        new HdStSimpleTextureResource(texture, textureType, wrapS, wrapT,
+        new HdStSimpleTextureResource(texture, textureType, wrapS, wrapT, wrapR,
                                       minFilter, magFilter, memoryLimit));
     timer.Stop();
 

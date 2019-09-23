@@ -63,11 +63,15 @@ class SdfAssetPath;
 /// 
 /// Linking is specified as collections (UsdCollectionAPI) which can
 /// be accessed via GetLightLinkCollection() and GetShadowLinkCollection().
-/// Note however that there are extra semantics in how UsdLuxLight
-/// uses its collections: if a collection is empty, the light is treated
-/// as linked to <i>all</i> geometry for the respective purpose.
-/// UsdCollectionAPI and UsdCollectionAPI::MembershipQuery are unaware
-/// of this light-specific interpretation.
+/// Note that these collections have their includeRoot set to true,
+/// so that lights will illuminate and cast shadows from all objects
+/// by default.  To illuminate only a specific set of objects, there
+/// are two options.  One option is to modify the collection paths
+/// to explicitly exclude everything else, assuming it is known;
+/// the other option is to set includeRoot to false and explicitly
+/// include the desired objects.  These are complementary approaches
+/// that may each be preferable depending on the scenario and how
+/// to best express the intent of the light setup.
 /// 
 ///
 class UsdLuxLight : public UsdGeomXformable
@@ -125,7 +129,7 @@ protected:
     ///
     /// \sa UsdSchemaType
     USDLUX_API
-    virtual UsdSchemaType _GetSchemaType() const;
+    UsdSchemaType _GetSchemaType() const override;
 
 private:
     // needs to invoke _GetStaticTfType.
@@ -137,7 +141,7 @@ private:
 
     // override SchemaBase virtuals.
     USDLUX_API
-    virtual const TfType &_GetTfType() const;
+    const TfType &_GetTfType() const override;
 
 public:
     // --------------------------------------------------------------------- //

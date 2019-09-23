@@ -31,7 +31,7 @@
 #include "pxr/imaging/hdSt/resourceRegistry.h"
 #include "pxr/imaging/hdSt/shaderKey.h"
 #include "pxr/usd/sdf/path.h"
-#include "pxr/imaging/glf/glslfx.h"
+#include "pxr/imaging/hio/glslfx.h"
 
 #include <boost/scoped_ptr.hpp>
 
@@ -42,7 +42,7 @@ typedef boost::shared_ptr<class HdSt_GeometricShader> HdSt_GeometricShaderShared
 
 /// \class HdSt_GeometricShader
 ///
-/// A geometric shader -- hydra internal use
+/// A geometric shader -- Storm internal use
 ///
 class HdSt_GeometricShader : public HdStShaderCode {
 public:
@@ -56,7 +56,9 @@ public:
         PRIM_MESH_REFINED_TRIANGLES, // e.g: loop subdiv
         PRIM_MESH_COARSE_QUADS,      // e.g: quadrangulation for ptex
         PRIM_MESH_REFINED_QUADS,     // e.g: catmark/bilinear subdiv
-        PRIM_MESH_PATCHES
+        PRIM_MESH_PATCHES,
+        PRIM_VOLUME                  // Simply draws triangles of bounding
+                                     // box of a volume.
     };                                         
 
     /// static query functions for PrimitiveType
@@ -80,7 +82,8 @@ public:
 
     static inline bool IsPrimTypeTriangles(PrimitiveType primType) {
         return (primType == PrimitiveType::PRIM_MESH_COARSE_TRIANGLES ||
-                primType == PrimitiveType::PRIM_MESH_REFINED_TRIANGLES);
+                primType == PrimitiveType::PRIM_MESH_REFINED_TRIANGLES ||
+                primType == PrimitiveType::PRIM_VOLUME);
     }
 
     static inline bool IsPrimTypeQuads(PrimitiveType primType) {
@@ -202,7 +205,7 @@ private:
     float _lineWidth;
     // depth offset?
 
-    boost::scoped_ptr<GlfGLSLFX> _glslfx;
+    boost::scoped_ptr<HioGlslfx> _glslfx;
     bool _cullingPass;
     ID _hash;
 

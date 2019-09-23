@@ -69,7 +69,7 @@ GlfSimpleLightingContext::New()
 }
 
 GlfSimpleLightingContext::GlfSimpleLightingContext() :
-    _shadows(new GlfSimpleShadowArray(GfVec2i(1024, 1024), 0)),
+    _shadows(TfCreateRefPtr(new GlfSimpleShadowArray(GfVec2i(1024, 1024), 0))),
     _worldToViewMatrix(1.0),
     _projectionMatrix(1.0),
     _sceneAmbient(0.01, 0.01, 0.01, 1.0),
@@ -280,7 +280,9 @@ GlfSimpleLightingContext::BindUniformBlocks(GlfBindingMapPtr const &bindingMap)
             float attenuation[4];
             bool hasShadow;
             int32_t shadowIndex;
-            int32_t padding2[2];
+            bool isIndirectLight;
+            bool padding2[3];
+            bool isZup;
         };
 
         struct Lighting {
@@ -338,6 +340,8 @@ GlfSimpleLightingContext::BindUniformBlocks(GlfBindingMapPtr const &bindingMap)
             lightingData->lightSource[i].spotCutoff = light.GetSpotCutoff();
             lightingData->lightSource[i].spotFalloff = light.GetSpotFalloff();
             lightingData->lightSource[i].hasShadow = light.HasShadow();
+            lightingData->lightSource[i].isIndirectLight = light.IsDomeLight();
+            lightingData->lightSource[i].isZup = light.IsZup();
 
             if (lightingData->lightSource[i].hasShadow) {
                 int shadowIndex = light.GetShadowIndex();

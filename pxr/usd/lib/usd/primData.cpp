@@ -48,9 +48,9 @@ static_assert(sizeof(Usd_PrimData) == 64,
 
 Usd_PrimData::Usd_PrimData(UsdStage *stage, const SdfPath& path)
     : _stage(stage)
-    , _primIndex(NULL)
+    , _primIndex(nullptr)
     , _path(path)
-    , _firstChild(NULL)
+    , _firstChild(nullptr)
     , _refCount(0)
 {
     if (!stage)
@@ -78,7 +78,7 @@ Usd_PrimData::GetParent() const
 
     SdfPath parent = _path.GetParentPath();
     return parent == SdfPath::EmptyPath() ?
-        NULL : _stage->_GetPrimDataAtPath(parent);
+        nullptr : _stage->_GetPrimDataAtPath(parent);
 }
 
 const PcpPrimIndex &
@@ -127,7 +127,7 @@ Usd_PrimData::_ComposeAndCacheFlags(Usd_PrimDataConstPtr parent,
         _flags[Usd_PrimActiveFlag] = active;
 
         // Cache whether or not this prim has a payload.
-        bool hasPayload = _primIndex->HasPayload();
+        bool hasPayload = _primIndex->HasAnyPayloads();
         _flags[Usd_PrimHasPayloadFlag] = hasPayload;
 
         // An active prim is loaded if it's loadable and in the load set, or

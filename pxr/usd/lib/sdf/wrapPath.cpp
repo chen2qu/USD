@@ -206,6 +206,7 @@ void wrapPath() {
 
         .def("GetParentPath", &This::GetParentPath)
         .def("GetPrimPath", &This::GetPrimPath)
+        .def("GetPrimOrPrimVariantSelectionPath", &This::GetPrimOrPrimVariantSelectionPath)
         .def("GetAbsoluteRootOrPrimPath", &This::GetAbsoluteRootOrPrimPath)
         .def("StripAllVariantSelections", &This::StripAllVariantSelections)
 
@@ -260,16 +261,17 @@ void wrapPath() {
              (std::string (*)(const std::string&, const std::string&))
                  &This::JoinIdentifier)
             .staticmethod("JoinIdentifier")
+
         .def("StripNamespace",
              (std::string (*)(const std::string&))
                  &This::StripNamespace)
             .staticmethod("StripNamespace")
+        .def("StripPrefixNamespace", &This::StripPrefixNamespace, 
+                return_value_policy<TfPyPairToTuple>())
+            .staticmethod("StripPrefixNamespace")
 
         .def("IsValidPathString", &_IsValidPathString)
              .staticmethod("IsValidPathString")
-
-        .def("IsBuiltInMarker", &This::IsBuiltInMarker)
-            .staticmethod("IsBuiltInMarker")             
 
         .def("FindPrefixedRange", _FindPrefixedRange)
             .staticmethod("FindPrefixedRange")

@@ -103,19 +103,19 @@ Usd_ClearValueIfBlocked(VtValue* value)
 template <class T>
 inline bool
 Usd_QueryTimeSample(
-    const SdfLayerRefPtr& layer, const SdfAbstractDataSpecId& specId,
+    const SdfLayerRefPtr& layer, const SdfPath& path,
     double time, Usd_InterpolatorBase* interpolator, T* result)
 {
-    return layer->QueryTimeSample(specId, time, result);
+    return layer->QueryTimeSample(path, time, result);
 }
 
 template <class T>
 inline bool
 Usd_QueryTimeSample(
-    const Usd_ClipRefPtr& clip, const SdfAbstractDataSpecId& specId,
+    const Usd_ClipRefPtr& clip, const SdfPath& path,
     double time, Usd_InterpolatorBase* interpolator, T* result)
 {
-    return clip->QueryTimeSample(specId, time, interpolator, result);
+    return clip->QueryTimeSample(path, time, interpolator, result);
 }
 
 /// Merges sample times in \p additionalTimeSamples into the vector pointed to 
@@ -145,13 +145,6 @@ Usd_InsertListItem(PROXY proxy, const typename PROXY::value_type &item,
     typename PROXY::ListProxy list(/* unused */ SdfListOpTypeExplicit);
     bool atFront = false;
     switch (position) {
-    case UsdListPositionTempDefault:
-        if (UsdAuthorOldStyleAdd()) {
-            proxy.Add(item);
-            return;
-        } else {
-            // Fall through to UsdListPositionBackOfPrependList case.
-        }
     case UsdListPositionBackOfPrependList:
         list = proxy.GetPrependedItems();
         atFront = false;
@@ -182,7 +175,7 @@ Usd_InsertListItem(PROXY proxy, const typename PROXY::value_type &item,
         list.Insert(-1, item);
     } else {
         const size_t pos = list.Find(item);
-        if (pos != -1) {
+        if (pos != size_t(-1)) {
             const size_t targetPos = atFront ? 0 : list.size()-1;
             if (pos == targetPos) {
                 // Item already exists in the right position.

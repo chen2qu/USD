@@ -32,7 +32,7 @@
 #include "pxr/base/vt/value.h"
 #include "pxr/usd/ndr/parserPlugin.h"
 #include "pxr/usd/sdr/declare.h"
-#include "OSL/oslquery.h"
+#include <OSL/oslquery.h>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -120,18 +120,11 @@ public:
     NdrNodeUniquePtr Parse(const NdrNodeDiscoveryResult& discoveryResult) 
         override;
 
-    static const NdrTokenVec& DiscoveryTypes;
-    static const TfToken& SourceType;
+    SDROSL_API
+    const NdrTokenVec& GetDiscoveryTypes() const override;
 
     SDROSL_API
-    const NdrTokenVec& GetDiscoveryTypes() const override {
-        return SdrOslParserPlugin::DiscoveryTypes;
-    }
-
-    SDROSL_API
-    const TfToken& GetSourceType() const override {
-        return SdrOslParserPlugin::SourceType;
-    }
+    const TfToken& GetSourceType() const override;
 
 private:
     // Gets a vector of properties that are present on the specified OSL
@@ -159,13 +152,16 @@ private:
     std::string _getParamAsString(const OslParameter& param) const;
 
     // Gets a common type + array size (if array) from the OSL parameter
-    std::tuple<TfToken, size_t> _getTypeName(const OslParameter* param) const;
+    std::tuple<TfToken, size_t> _getTypeName(
+        const OslParameter* param,
+        const NdrTokenMap& metadata) const;
 
     // Gets the default value of the specified param.
     VtValue _getDefaultValue(
         const SdrOslParserPlugin::OslParameter& param,
         const std::string& oslType,
-        bool isArray
+        size_t arraySize,
+        const NdrTokenMap& metadata
     ) const;
 };
 

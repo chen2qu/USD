@@ -22,6 +22,7 @@ pxr_library(tf
         ${TBB_INCLUDE_DIRS}
 
     PUBLIC_CLASSES
+        anyUniquePtr
         anyWeakPtr
         atomicOfstreamWrapper
         bitUtils
@@ -42,12 +43,10 @@ pxr_library(tf
         expiryNotifier
         fastCompression
         fileUtils
-        flyweight
         getenv
         hash
         iterator
         mallocTag
-        move
         notice
         nullPtr
         ostreamMethods
@@ -66,6 +65,7 @@ pxr_library(tf
         scopeDescription
         setenv
         singleton
+        smallVector
         stackTrace
         stacked
         status
@@ -130,6 +130,7 @@ pxr_library(tf
         preprocessorUtils.h
         preprocessorUtilsLite.h
         safeTypeCompare.h
+        span.h
         staticData.h
         staticTokens.h
         typeInfoMap.h
@@ -292,11 +293,19 @@ pxr_build_test(testTfCast
         testenv/testTfCast.cpp
 )
 
+pxr_build_test(testTfSpan
+    LIBRARIES
+        tf
+    CPPFILES
+        testenv/testTfSpan.cpp
+)
+
 pxr_build_test(testTf
     LIBRARIES
         tf
     CPPFILES
         testenv/main.cpp
+        testenv/anyUniquePtr.cpp
         testenv/atomicOfstreamWrapper.cpp
         testenv/bitUtils.cpp
         testenv/debug.cpp
@@ -308,7 +317,6 @@ pxr_build_test(testTf
         testenv/envSetting.cpp
         testenv/fastCompression.cpp
         testenv/fileUtils.cpp
-        testenv/flyweight.cpp
         testenv/getenv.cpp
         testenv/hash.cpp
         testenv/iterator.cpp
@@ -326,6 +334,7 @@ pxr_build_test(testTf
         testenv/scoped.cpp
         testenv/scopeDescription.cpp
         testenv/setenv.cpp
+        testenv/smallVector.cpp
         testenv/stacked.cpp
         testenv/staticData.cpp
         testenv/stl.cpp
@@ -357,10 +366,6 @@ pxr_test_scripts(
     testenv/testTf_PyContainerConversions.py
 )
 
-pxr_install_test_dir(
-    SRC testenv/baseline/TfDebug
-    DEST TfDebug/baseline
-)
 # These tests will depend on downstream libraries when built monolithic.
 # We don't want changes to those libraries to affect test results so we
 # simply disable these tests in that case.
@@ -395,6 +400,9 @@ pxr_install_test_dir(
     DEST testTfScriptModuleLoader/baseline
 )
 
+pxr_register_test(TfAnyUniquePtr
+    COMMAND "${CMAKE_INSTALL_PREFIX}/tests/testTf TfAnyUniquePtr"
+)
 pxr_register_test(TfAtomicOfstreamWrapper
     COMMAND "${CMAKE_INSTALL_PREFIX}/tests/testTf TfAtomicOfstreamWrapper"
 )
@@ -406,8 +414,6 @@ pxr_register_test(TfDl
 )
 pxr_register_test(TfDebug
     COMMAND "${CMAKE_INSTALL_PREFIX}/tests/testTf TfDebug"
-    STDOUT_REDIRECT debug.out
-    DIFF_COMPARE debug.out
 )
 pxr_register_test(TfDebugFatal_1
     COMMAND "${CMAKE_INSTALL_PREFIX}/tests/testTf TfDebugFatal_1"
@@ -481,9 +487,6 @@ pxr_register_test(TfFileUtils_Python
 pxr_register_test(TfStringUtils_Python
     PYTHON
     COMMAND "${CMAKE_INSTALL_PREFIX}/tests/testTfStringUtils"
-)
-pxr_register_test(TfFlyweight
-    COMMAND "${CMAKE_INSTALL_PREFIX}/tests/testTf TfFlyweight"
 )
 pxr_register_test(TfGetenv
     COMMAND "${CMAKE_INSTALL_PREFIX}/tests/testTf TfGetenv"
@@ -567,11 +570,12 @@ pxr_register_test(TfScoped
 pxr_register_test(TfScopedVar
     COMMAND "${CMAKE_INSTALL_PREFIX}/tests/testTf TfScopedVar"
 )
-
 pxr_register_test(TfSetenv
     COMMAND "${CMAKE_INSTALL_PREFIX}/tests/testTf TfSetenv"
 )
-
+pxr_register_test(TfSmallVector
+    COMMAND "${CMAKE_INSTALL_PREFIX}/tests/testTf TfSmallVector"
+)
 pxr_register_test(TfStacked
     COMMAND "${CMAKE_INSTALL_PREFIX}/tests/testTf TfStacked"
 )
@@ -676,4 +680,7 @@ pxr_register_test(testTf_PyStaticTokens
 )
 pxr_register_test(testTfCxxCast
     COMMAND "${CMAKE_INSTALL_PREFIX}/tests/testTfCast"
+)
+pxr_register_test(testTfSpan
+    COMMAND "${CMAKE_INSTALL_PREFIX}/tests/testTfSpan"
 )

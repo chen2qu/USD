@@ -126,7 +126,7 @@ protected:
     ///
     /// \sa UsdSchemaType
     USDLUX_API
-    virtual UsdSchemaType _GetSchemaType() const;
+    UsdSchemaType _GetSchemaType() const override;
 
 private:
     // needs to invoke _GetStaticTfType.
@@ -138,7 +138,7 @@ private:
 
     // override SchemaBase virtuals.
     USDLUX_API
-    virtual const TfType &_GetTfType() const;
+    const TfType &_GetTfType() const override;
 
 public:
     // --------------------------------------------------------------------- //
@@ -188,12 +188,13 @@ public:
     // SHADOWDISTANCE 
     // --------------------------------------------------------------------- //
     /// The maximum distance shadows are cast.
-    /// There is no limit unless this attribute value is overridden.
+    /// The default value (-1) indicates no limit.
+    /// 
     ///
     /// \n  C++ Type: float
     /// \n  Usd Type: SdfValueTypeNames->Float
     /// \n  Variability: SdfVariabilityVarying
-    /// \n  Fallback Value: No Fallback
+    /// \n  Fallback Value: -1.0
     USDLUX_API
     UsdAttribute GetShadowDistanceAttr() const;
 
@@ -209,13 +210,14 @@ public:
     // --------------------------------------------------------------------- //
     // SHADOWFALLOFF 
     // --------------------------------------------------------------------- //
-    /// The near distance at which shadow falloff beings.
-    /// There is no falloff unless this attribute value is overridden.
+    /// The near distance at which shadow falloff begins.
+    /// The default value (-1) indicates no falloff.
+    /// 
     ///
     /// \n  C++ Type: float
     /// \n  Usd Type: SdfValueTypeNames->Float
     /// \n  Variability: SdfVariabilityVarying
-    /// \n  Fallback Value: No Fallback
+    /// \n  Fallback Value: -1.0
     USDLUX_API
     UsdAttribute GetShadowFalloffAttr() const;
 
